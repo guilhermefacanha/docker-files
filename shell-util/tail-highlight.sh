@@ -17,6 +17,13 @@ function dotail()
 if (( $# <= 1 )); then
     printf "
     Script to tail a file and highlight for searched word.
+    If you want to change the color of tail just run the command:
+    red > export GREP_COLORS='ms=01;31'
+    green > export GREP_COLORS='ms=01;32'
+    yellow > export GREP_COLORS='ms=01;33'
+    blue > export GREP_COLORS='ms=01;34'
+    
+    to see all colors available run the colors.sh file
     
     $_green Usage: $_reset 
     	$_blue tail-highlight.sh $_green <<file>> <<search_for>> $_reset 
