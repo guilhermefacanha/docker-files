@@ -1,11 +1,11 @@
 FROM daggerok/jboss-eap-7.2:7.2.5-centos
 
 #Variables
-ENV POSTGRES_SERVER=creasp-hml.cksiko2fdktm.sa-east-1.rds.amazonaws.com
+ENV POSTGRES_SERVER=localhost
 ENV POSTGRES_PORT=5432
-ENV POSTGRES_DB=tpd_dados
-ENV POSTGRES_USER=trapro
-ENV POSTGRES_PASS=R&crut@0
+ENV POSTGRES_DB=db
+ENV POSTGRES_USER=user
+ENV POSTGRES_PASS=pass
 ENV MIN_POOL_SIZE=10
 ENV MAX_POOL_SIZE=50
 
