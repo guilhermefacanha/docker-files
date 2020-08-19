@@ -1,11 +1,11 @@
 #!/bin/bash
 
 _operation="some"
-_container="activemq"
-_image="vromero/activemq-artemis"
-_build_image="jms/activemq:1.0"
-_ports="-p 8161:8161 -p 61616:61616"
-_envs="-e ARTEMIS_USERNAME=admin -e ARTEMIS_PASSWORD=admin"
+_container="sonarqube"
+_image="sonarqube:8.2-community"
+_build_image="sonarqube:1.0"
+
+_port="9000"
 
 echo 'params: '$#
 echo "$@"
@@ -22,13 +22,12 @@ echo ' ==== '
 
 case "$_operation" in
     'create')
-    	echo "=>creating Active MQ Server containers: "
-        docker run -it --rm $_ports $_envs --name $_container --detach $_image
-        
-        echo "Active MQ Server"
-        echo "Host: http://localhost:8161/admin"
-        echo "username: admin"
-        echo "password: admin"
+    	echo "=>creating $_container container: "
+		docker run -p $_port:$_port --name $_container -d $_image
+		
+		echo "SonarQube Created"
+	    echo "Host: localhost:$_port"
+		echo "Log in to http://localhost:9000 with System Administrator credentials (login=admin, password=admin)."
     ;;
     'remove')
         docker rm -f $_container
@@ -45,7 +44,7 @@ case "$_operation" in
 	    docker logs $_container
     ;;
     'status')
-        docker ps | grep $_container
+        docker ps | grep ldap
     ;;
     'start')  
 	    docker start $_container
