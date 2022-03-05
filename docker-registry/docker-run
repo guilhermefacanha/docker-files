@@ -1,0 +1,15 @@
+#Authentication
+sudo apt install apache2-utils
+
+@create folder to hold auth
+mkdir auth
+
+#create user password
+  #with new file
+  htpasswd -Bc /opt/auth/registry.password testuser
+  #append to file
+  htpasswd -B registry.password testuser
+  e0d567d9870947f88e4e76124a5d4c39
+
+#create container
+docker-compose up -d

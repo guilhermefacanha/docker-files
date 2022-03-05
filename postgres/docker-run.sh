@@ -1,10 +1,10 @@
 #!/bin/bash
 
 _operation="some"
-_container="postgres12"
-_image="postgres:12"
+_container="postgres11"
+_image="postgres:11"
 _build_image="postgres:1.0"
-_volume=/Users/guilhermefacanha/workspace/docker/postgresql12/data
+_volume=/Users/guilhermefacanha/workspace/docker/postgresql11/data
 
 _port="5432"
 
@@ -24,7 +24,7 @@ echo ' ==== '
 case "$_operation" in
     'create')
     	echo "=>creating $_container container: "
-		docker run -p $_port:$_port --name $_container -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=1234 -v $_volume:/var/lib/postgresql/data -d $_image
+		docker run -p $_port:$_port --name $_container --restart unless-stopped -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=1234 -v $_volume:/var/lib/postgresql/data -d $_image
 		
 		echo "Postgres Created"
 	    echo "Container: $_container"

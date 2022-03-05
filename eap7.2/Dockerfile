@@ -33,7 +33,7 @@ RUN sudo /opt/eap/bin/add-user.sh --silent=true jbossAdmin 1qaz@WSX
 
 #Copy driver modules and War files
 COPY ./postgresql /opt/eap/modules/system/layers/base/org/postgresql
-COPY ./war/*.war /opt/deploy
+COPY ./war /opt/deploy
 
 #Create datasource using copy pre configured standalone.xml
 #COPY ./conf/standalone.xml ${JBOSS_HOME}/standalone/configuration/standalone.xml

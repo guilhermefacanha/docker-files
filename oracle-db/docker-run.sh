@@ -31,7 +31,7 @@ echo ' ==== '
 case "$_operation" in
     'create')
     	echo "=>creating container $_container: "
-	    docker run -d -p 1521:1521 -p 8888:8080 -e ORACLE_ALLOW_REMOTE=true --name $_container --detach $_image
+	    docker run -d -p 1521:1521 -p 8888:8080 -e ORACLE_ALLOW_REMOTE=true --restart unless-stopped --name $_container --detach $_image
 
         echo "==================================
         Web Apex:
@@ -64,7 +64,7 @@ case "$_operation" in
         docker image prune -f
     ;;
     'log')
-	    docker logs $_container
+	    docker logs -f $_container
     ;;
     'status')
         docker ps | grep $_container

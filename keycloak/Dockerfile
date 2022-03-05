@@ -1,0 +1,5 @@
+FROM quay.io/keycloak/keycloak:11.0.3
+
+#EXPOSE PORTS
+EXPOSE 8180
+EXPOSE 10090

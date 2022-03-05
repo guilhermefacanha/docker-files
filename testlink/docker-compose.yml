@@ -1,0 +1,41 @@
+#check https://github.com/bitnami/bitnami-docker-testlink/issues/54
+#chmod 777 -R /opt/test_link/
+#docker-compose up -d --force-recreate
+#docker cp httpd.conf testlink:/opt/bitnami/apache/conf/httpd.conf
+#docker cp testlink.conf testlink:/opt/bitnami/apache/conf/testlink.conf
+#docker restart testlink
+version: '2'
+services:
+  mariadb:
+    image: docker.io/bitnami/mariadb:10.3
+    container_name: mariadb
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - MARIADB_USER=bn_testlink
+      - MARIADB_DATABASE=bitnami_testlink
+    volumes:
+      - '/opt/test_link/mariadb_data:/bitnami/mariadb'
+  testlink:
+    image: docker.io/bitnami/testlink:1.9.20
+    container_name: testlink
+    ports:
+      - '8080:8080'
+      - '8443:8443'
+    environment:
+      - TESTLINK_DATABASE_HOST=mariadb
+      - TESTLINK_DATABASE_PORT_NUMBER=3306
+      - TESTLINK_DATABASE_USER=bn_testlink
+      - TESTLINK_DATABASE_NAME=bitnami_testlink
+      - TESTLINK_USERNAME=admin
+      - TESTLINK_PASSWORD=admin
+      - TESTLINK_LANGUAGE=pt_BR
+      - ALLOW_EMPTY_PASSWORD=yes
+    volumes:
+      - '/opt/test_link/testlink_data:/bitnami/testlink'
+    depends_on:
+      - mariadb
+volumes:
+  mariadb_data:
+    driver: local
+  testlink_data:
+    driver: local
