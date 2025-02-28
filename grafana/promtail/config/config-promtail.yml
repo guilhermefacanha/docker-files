@@ -1,0 +1,18 @@
+server:
+  http_listen_port: 9081
+  grpc_listen_port: 0
+
+positions:
+  filename: ./positions.yaml
+
+clients:
+  - url: 'http://host.docker.internal:3100/loki/api/v1/push'
+
+scrape_configs:
+  - job_name: sonarfinder
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: sonarfinder
+          __path__: /opt/logs/catalina.out
