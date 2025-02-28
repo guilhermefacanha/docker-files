@@ -2,11 +2,11 @@
 
 _operation="some"
 _container="superset"
-_image="tylerfowler/superset"
-_build_image="superset:1.0"
-_volume=/Users/guilhermefacanha/workspace/docker/postgresql12/data
-
-_port="8088"
+_build_image="superset:3.1.1"
+_build_latest="superset:latest"
+_version="3.1.1"
+_volume=data
+_port=" -p 8088:8088"
 
 echo 'params: '$#
 echo "$@"
@@ -24,10 +24,9 @@ echo ' ==== '
 case "$_operation" in
     'create')
     	echo "=>creating $_container container: "
-        docker run -d --name $_container -e ADMIN_USERNAME=admin -e ADMIN_FIRST_NAME=Adminitrator -e ADMIN_LAST_NAME=LastName -e ADMIN_EMAIL=email@email.com -e ADMIN_PWD=admin -p $_port:$_port $_image
-		
-		
-        echo "Container Created"
+    	echo ">docker run -d --name $_container $_port $_build_image"
+      docker run -d --name $_container $_port $_build_image
+      echo "Container Created"
 	    echo "Container: $_container"
 	    echo "Host: localhost:$_port"
 		echo "Login: admin"
@@ -36,13 +35,19 @@ case "$_operation" in
         echo ""
         echo "Use host http://host.docker.internal to connect from container to host machine"
         echo ""
-
-        echo ""
-        echo "To install mysql client use commands:"
-        echo ">apt-get update"
-        echo ">apt-get install python3-dev default-libmysqlclient-dev build-essential"
-        echo ">pip install --upgrade pip"
-        echo ">pip install mysqlclient"
+        
+        echo "to create admin"
+        echo "docker exec -it superset superset fab create-admin --username admin --firstname Superset --lastname Admin --email admin@superset.com --password admin"
+		
+		echo "to migrate local DB to latest"              
+        echo "$ docker exec -it superset superset db upgrade"
+        
+        echo "to load examples"
+        echo "docker exec -it superset superset load_examples"
+        
+        echo "to setup roles"
+        echo "docker exec -it superset superset init"
+        
         echo ""
 	    
     ;;
@@ -54,15 +59,33 @@ case "$_operation" in
     ;;
     'clean')
         docker rm -f $_container
-        docker rmi -f $_image
+        docker rmi -f $_build_image
         docker image prune -f
     ;;
     'log')
-	    docker logs $_container
+	    docker logs -f $_container
     ;;
     'status')
         docker ps | grep ldap
     ;;
+   'tag')
+      	echo "tag/exporting container to image with tag $_build_image"
+      	echo ">docker commit $_container $_build_image"
+      	docker commit $_container $_build_image
+      	echo ">docker tag $_build_image guilhermefacanha/$_build_image"
+        docker tag $_build_image guilhermefacanha/$_build_image
+      	echo ">docker push guilhermefacanha/$_build_image"
+        docker push guilhermefacanha/$_build_image
+    ;;
+  'tag-latest')
+        	echo "tag/exporting container to image with tag $_build_latest"
+        	echo ">docker commit $_container $_build_latest"
+        	docker commit $_container $_build_latest
+        	echo ">docker tag $_build_latest guilhermefacanha/$_build_latest"
+          docker tag $_build_latest guilhermefacanha/$_build_latest
+        	echo ">docker push guilhermefacanha/$_build_latest"
+          docker push guilhermefacanha/$_build_latest
+      ;;
     'start')  
 	    docker start $_container
     ;;

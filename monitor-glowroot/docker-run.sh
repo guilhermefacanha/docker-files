@@ -52,7 +52,7 @@ case "$_operation" in
     ;;
     'create')
     	echo "=>creating $_container container: "
-		docker run --privileged -it -d -p $_port:$_port --name $_container $_build_image
+		docker run --privileged -it -d -p 4000:4000 -p 3100:3100 --name $_container $_build_image
 		
         echo "SonarFinder Docker Created"
 		showHelp
@@ -62,7 +62,8 @@ case "$_operation" in
         docker rm -f $_container
     ;;
     'build')
-        docker build --rm --no-cache -t $_build_image .
+        #docker build --rm --no-cache -t $_build_image .
+        docker build -t $_build_image .
     ;;
     'clean')
         docker rm -f $_container

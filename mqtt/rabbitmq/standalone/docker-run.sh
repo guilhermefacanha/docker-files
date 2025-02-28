@@ -1,9 +1,11 @@
 #!/bin/bash
 
 _operation="some"
-_container="rabbitmq"
-_image="rabbitmq:3-management"
-_build_image="jms/rabbitmq:1.0"
+_container="rabbitmqtt"
+_image="rabbitmqtt"
+_build_image="rabbitmqtt"
+_ports="-p 15672:15672 -p 5672:5672 -p 1883:1883"
+_envs=""
 
 echo 'params: '$#
 echo "$@"
@@ -20,13 +22,13 @@ echo ' ==== '
 
 case "$_operation" in
     'create')
-    	echo "=>creating ldap containers: "
-	docker run -p 5672:5672 -p 15672:15672 -e RABBITMQ_DEFAULT_USER=admin -e RABBITMQ_DEFAULT_PASS=admin --privileged --name $_container --detach $_image
-	
-	echo "Rabbit MQ Server"
-    echo "Host: http://localhost:15672/"
-    echo "username: admin"
-    echo "password: admin"
+    	echo "=>creating Active MQ Server containers: "
+        docker run -it --privileged --restart unless-stopped $_ports $_envs --name $_container --detach $_image
+        
+        echo "RABBIT MQ Server"
+        echo "Host: http://localhost:15672/"
+        echo "username: admin"
+        echo "password: admin"
     ;;
     'remove')
         docker rm -f $_container
