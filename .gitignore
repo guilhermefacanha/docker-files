@@ -25,3 +25,6 @@ hs_err_pid*
 /.project
 .idea
 .DS_Store
+*.iml
+*.parquet
+venv
