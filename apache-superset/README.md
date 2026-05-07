@@ -1,4 +1,39 @@
+# Docker Apache Superset
 
+To build image
+
+```bash 
+#build default
+docker build -f Dockerfile -t superset .
+
+#build with apache drill
+docker-compose -p superset_drill up --build -d
+
+#remove
+docker-compose -p superset_drill down
+
+```
+
+To Run
+
+```bash 
+docker run -d --name superset -p 8088:8088 --restart always superset
+
+# run with drill
+docker run -d --name superset -p 8047:8047 -p 8088:8088 --restart always superset
+```
+
+Test
+```shell
+# in apache drill config mongo using storages
+#in sql lab type command
+show schemas;
+```
+
+Driver
+```shell
+drill+sadrill://18.207.157.117:8047/mongo?use_ssl=False
+```
 
 # Postgres - Create readonly user for superset
 

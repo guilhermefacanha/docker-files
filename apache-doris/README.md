@@ -1,37 +1,109 @@
-# Apache Doris Docker Dev Env
+# Apache Doris Docker Development Environment
 
-```shell
+This repository provides a Docker-based development environment for Apache Doris, allowing you to quickly set up and experiment with Doris.
+
+## Getting Started
+
+To set up and start the Apache Doris cluster, run the `setup.sh` script:
+
+```bash
 sh setup.sh
 ```
 
-Test the connections
-``` shell
-## Check the FE status to ensure that both the Join and Alive columns are true.
+This script performs the following actions:
+1.  **Checks Environment**: Verifies that Docker and `docker-compose` (or `docker compose`) are installed on your system.
+2.  **Detects OS**: Determines your operating system (Linux or macOS) to generate the appropriate `docker-compose` configuration.
+3.  **Generates `docker-compose-doris.yaml`**: Creates a `docker-compose-doris.yaml` file tailored for your OS.
+    *   **Linux**: Uses `network_mode: host` for direct access.
+    *   **macOS**: Sets up a custom bridge network with specific IP addresses and port mappings.
+4.  **Starts Services**: Brings up the Doris FrontEnd (FE) and BackEnd (BE) services using the generated `docker-compose` file.
+
+### Configuration
+
+You can specify the Apache Doris version to use by passing the `-v` flag to the `setup.sh` script:
+
+```bash
+sh setup.sh -v 2.1.9 # Example: Use Doris version 2.1.9 (default if not specified)
+```
+
+## Connecting to Apache Doris
+
+Once the cluster is started, you can connect to it using the MySQL client.
+
+**MySQL Client Connection:**
+
+```bash
+mysql -uroot -P9030 -h127.0.0.1
+```
+
+**Web Interface Access:**
+
+The Doris web interfaces (FE and BE) can be accessed via HTTP. The exact address depends on your operating system:
+
+*   **Linux:**
+    *   FE: `http://127.0.0.1:8030`
+    *   BE: `http://127.0.0.1:8040`
+*   **macOS:**
+    *   FE: `http://docker.for.mac.localhost:8030` (or `http://127.0.0.1:8030` if the former fails)
+    *   BE: `http://docker.for.mac.localhost:8040` (or `http://127.0.0.1:8040` if the former fails)
+
+## Managing the Cluster
+
+*   **Stop Cluster:**
+    ```bash
+    docker compose -f docker-compose-doris.yaml down
+    ```
+*   **View Logs:**
+    ```bash
+    docker compose -f docker-compose-doris.yaml logs -f
+    ```
+
+## Test the Connections
+
+Ensure that both the FrontEnd (FE) and BackEnd (BE) services are running and healthy.
+
+### Check FE Status
+
+```bash
 mysql -uroot -P9030 -h127.0.0.1 -e 'SELECT `host`, `join`, `alive` FROM frontends()'
+```
+
+Expected Output:
+```
 +-----------+------+-------+
 | host      | join | alive |
 +-----------+------+-------+
 | 127.0.0.1 | true | true  |
 +-----------+------+-------+
+```
 
-## Check the BE status to ensure that the Alive column is true.
+### Check BE Status
+
+```bash
 mysql -uroot -P9030 -h127.0.0.1 -e 'SELECT `host`, `alive` FROM backends()'
+```
+
+Expected Output:
+```
 +-----------+-------+
 | host      | alive |
 +-----------+-------+
 | 127.0.0.1 |     1 |
 +-----------+-------+
-
 ```
-
 
 ## Load Test Data from Parquet
 
-Create Database and Table
+This section describes how to create tables and load sample Parquet data into your Doris cluster.
+
+### Create Database and Tables
+
+First, connect to Doris using the MySQL client and create a database and the necessary tables:
+
 ```sql
 CREATE DATABASE IF NOT EXISTS my_database;
 
---create sample table
+-- Create sample table for generic parquet data
 CREATE TABLE `parquet_data` (
   `id` int NULL,
   `bool_col` boolean NULL,
@@ -62,7 +134,7 @@ PROPERTIES (
 );
 
 
---create events table
+-- Create events table
 CREATE TABLE events (
                         analyzedClientIP VARCHAR(255),
                         appUserName VARCHAR(255),
@@ -101,48 +173,62 @@ CREATE TABLE events (
 PROPERTIES (
     "replication_num" = "1"
 );
-
 ```
 
-Generate load parquet file data with Go
-```shell
+### Generate Parquet Data
+
+You can generate sample Parquet data using either Go or Python.
+
+#### Generate with Go
+
+Navigate to the `load-test-data` directory (or where your Go script is located) and run:
+
+```bash
 go run generate_parquet_data.go -n 1000000 -o my_test_data.parquet
 ```
 
-Generate load parquet file data with Python
-```shell
+#### Generate with Python
 
-# Navigate to your project directory (e.g., apache-doris or load-test-data)
-cd ~/apache-doris/load-test-data # Or wherever your script is
+1.  **Navigate to the directory**:
+    ```bash
+    cd ~/apache-doris/load-test-data # Or wherever your script is
+    ```
+2.  **Create and activate a virtual environment**:
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+3.  **Install dependencies**:
+    ```bash
+    pip install pandas pyarrow faker
+    ```
+4.  **Generate data**:
+    ```bash
+    python generate-parquet.py 1000000 my_custom_data.parquet
+    ```
 
-# Create a virtual environment
-python3 -m venv venv
+### Load Parquet Data into Doris
 
-# Activate the virtual environment
-source venv/bin/activate
+Use `curl` to stream load the generated Parquet files into the respective Doris tables.
 
-# Now install pandas, pyarrow, and faker into the activated environment
-pip install pandas pyarrow faker
+#### Load into `parquet_data` table
 
-python generate-parquet.py 1000000 my_custom_data.parquet
-
-```
-
-```shell
-#sample table
+```bash
 curl -u root:root \
     -H "format: parquet" \
     -H "columns: id, bool_col, tinyint_col, smallint_col, int_col, bigint_col, float_col, double_col, date_string_col, string_col, timestamp_col" \
     -H "Expect:100-continue" \
     --data-binary @load-test-data/alltypes_plain.parquet \
     -XPUT http://localhost:8040/api/my_database/parquet_data/_stream_load
+```
 
-#events table
+#### Load into `events` table
+
+```bash
 curl -u root:root \
   -H "format: parquet" \
     -H "columns: analyzedClientIP, appUserName, assetId, auditPolicy, clientHostName, clientPort, collectionPlatform, databaseName, dbId, dbUserName, failedSqls, gatewayEventTime, id, objectsAndVerbs, objectsAndVerbsClassifications, originalSql, osUser, periodStart, serverHostName, serverIP, serverPort, serverType, serviceName, sessionId, sonarGSource, sourceProgram, successfulSqls, terminal, timestamp, totalRecordsAffected, utcOffset, vendor" \
     -H "Expect:100-continue" \
     --data-binary @parquet-java/events2.parquet \
   -XPUT http://localhost:8040/api/my_database/events/_stream_load
-
 ```

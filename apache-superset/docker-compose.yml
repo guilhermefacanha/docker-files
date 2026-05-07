@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superset
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: ee15d026-c939-46bd-a00c-22dd0115e0d8
+      SUPERSET_CONFIG_PATH: /app/superset_config.py
+    volumes:
+      - ./files/superset_config.py:/app/superset_config.py
+    depends_on:
+      - drill
+    restart: always
+
+  drill:
+    image: apache/drill:latest-openjdk-17
+    container_name: drill
+    environment:
+      DRILL_HOME: /opt/drill
+      DRILL_LOG_DIR: /var/lib/drill/log
+    ports:
+      - "8047:8047"
+      - "31010:31010"
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "-c", "/opt/drill/bin/drill-embedded && tail -f /dev/null"]
