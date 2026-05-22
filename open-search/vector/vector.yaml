@@ -1,0 +1,56 @@
+# vector.yaml
+data_dir: /var/lib/vector
+
+sources:
+  docker_logs:
+    type: file
+    include:
+      - /var/lib/docker/containers/3aa52bff2cfc7cb500500e616d39b1f8cfbc603958ff5f56a238a76a4ec1b70b/*.log
+    read_from: beginning
+
+transforms:
+  parse_docker_json:
+    type: remap
+    inputs:
+      - docker_logs
+    source: |-
+      parsed = parse_json!(.message)
+      .message = parsed.log
+      .timestamp = parsed.time
+      # Extract log_level
+      if contains(to_string!(.message), "DEBUG") {
+        .log_level = "DEBUG"
+      } else if contains(to_string!(.message), "INFO") {
+        .log_level = "INFO"
+      } else if contains(to_string!(.message), "WARNING") {
+        .log_level = "WARNING"
+      } else if contains(to_string!(.message), "ERROR") {
+        .log_level = "ERROR"
+      } else if contains(to_string!(.message), "SEVERE") {
+        .log_level = "SEVERE"
+      } else if contains(to_string!(.message), "Hibernate") {
+        .log_level = "Hibernate"
+      } else if contains(to_string!(.message), "Caused by:") {
+        .log_level = "Exception"
+      } else {
+        .log_level = ""
+      }
+
+sinks:
+  opensearch:
+    type: elasticsearch
+    inputs:
+      - parse_docker_json
+    endpoints:
+      - https://opensearch-api.gfsolucoesti.com.br:443
+    bulk:
+      index: ged-tomcat-logs
+      action: index
+    api_version: 'v8'
+    auth:
+      strategy: basic
+      user: admin
+      password: 1qaz@WSX3edc
+    tls:
+      verify_certificate: false
+      verify_hostname: false

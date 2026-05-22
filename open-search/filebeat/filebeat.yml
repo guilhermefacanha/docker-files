@@ -1,0 +1,21 @@
+filebeat.inputs:
+    - type: filestream
+      enabled: true
+      paths:
+        - /var/lib/docker/containers/3aa52bff2cfc7cb500500e616d39b1f8cfbc603958ff5f56a238a76a4ec1b70b/*.log
+      parsers:
+        - ndjson:
+            keys_under_root: true
+            add_error_key: true
+            message_key: log
+
+output.opensearch:
+  hosts: ["https://opensearch-api.gfsolucoesti.com.br:443"]
+  username: "admin"
+  password: "1qaz@WSX3edc"
+  index: "ged-tomcat-log-filebeat"
+  ssl.verification_mode: none
+
+setup.ilm.enabled: false
+ilm.enabled: false
+
