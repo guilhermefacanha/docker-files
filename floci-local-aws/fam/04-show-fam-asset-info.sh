@@ -8,6 +8,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/00-env.sh"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 FAM_USER_ARN="arn:aws:iam::${ACCOUNT_ID}:user/${FAM_USER_NAME}"
 
+# Derive host and port from AWS_ENDPOINT_URL for the asset-editing instructions.
+_url="${AWS_ENDPOINT_URL#http://}"; _url="${_url#https://}"
+FLOCI_HOST="${_url%%:*}"
+FLOCI_PORT="${_url##*:}"; FLOCI_PORT="${FLOCI_PORT%%/*}"
+
 bucket_region() {
     local bucket="$1"
     local loc
@@ -119,6 +124,34 @@ Underlying floci state (FYI)
   docker-compose.yml AND the bucket_account_id in your DSF cloud
   account asset. Mismatch causes CloudTrail log files to land at
   AWSLogs/<wrong_id>/CloudTrail/... and the gateway finds nothing.
+
+================================================================
+IMPORTANT — Fixing DSF Hub asset endpoints after onboarding
+----------------------------------------------------------------
+The DSF Hub UI does not allow editing the AWS endpoint URL after
+an asset is created. To point the assets at floci instead of real
+AWS you must update the asset documents directly:
+
+  1. Open DSF Hub → Discover → Asset Index Pattern
+  2. Search for your FAM assets (cloud account + both S3 buckets)
+  3. Edit each document and set the following fields to the actual
+     floci host and port (shown above as "Floci endpoint"):
+
+     For the CLOUD ACCOUNT asset:
+       Server Host Name       → $FLOCI_HOST   (e.g. 192.168.51.40)
+       Server Port            → $FLOCI_PORT   (e.g. 4566)
+       service_endpoints.s3  → $AWS_ENDPOINT_URL
+       service_endpoints.logs → $AWS_ENDPOINT_URL
+       service_endpoints.rds  → $AWS_ENDPOINT_URL
+       credentials_endpoint   → $AWS_ENDPOINT_URL
+
+     For the LOG DESTINATION and DATA SOURCE S3 assets:
+       Server Host Name       → $FLOCI_HOST
+       Server Port            → $FLOCI_PORT
+
+  Without this step the DSF gateway sends API calls to real AWS
+  instead of floci, and the fam-user credentials are rejected with
+  InvalidAccessKeyId.
 
 ================================================================
 EOF
