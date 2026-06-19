@@ -1,0 +1,41 @@
+FROM postgres:16-alpine AS builder
+
+ARG PGAUDIT_VERSION=16.0
+
+RUN apk add --no-cache \
+        gcc make musl-dev \
+        clang19 llvm19 \
+        wget \
+        openssl-dev \
+        krb5-dev
+
+# postgres:16-alpine ships pg_config at /usr/local/bin/pg_config
+# but lacks the server header files; install them from the same Alpine repo.
+RUN apk add --no-cache postgresql16-dev 2>/dev/null || \
+    apk add --no-cache postgresql-dev
+
+RUN wget -qO /tmp/pgaudit.tar.gz \
+        "https://github.com/pgaudit/pgaudit/archive/refs/tags/${PGAUDIT_VERSION}.tar.gz" \
+    && tar -xzf /tmp/pgaudit.tar.gz -C /tmp \
+    && mv /tmp/pgaudit-${PGAUDIT_VERSION} /tmp/pgaudit \
+    && cd /tmp/pgaudit \
+    && make USE_PGXS=1 \
+    && make install USE_PGXS=1
+
+# ── Final image ──────────────────────────────────────────────────────────────
+FROM postgres:16-alpine
+
+COPY --from=builder /usr/local/lib/postgresql/pgaudit.so \
+                    /usr/local/lib/postgresql/
+COPY --from=builder /usr/local/share/postgresql/extension/pgaudit.control \
+                    /usr/local/share/postgresql/extension/pgaudit--*.sql \
+                    /usr/local/share/postgresql/extension/
+
+LABEL org.opencontainers.image.description="postgres:16-alpine + pgaudit for DSF Hub local testing"
+
+# Runs once on first DB init: sets log_line_prefix, creates pgaudit extension and audit users
+COPY init-dsf-audit.sql /docker-entrypoint-initdb.d/10-dsf-audit.sql
+
+# shared_preload_libraries must be set at server start (not just ALTER SYSTEM)
+# so pgaudit.so is loaded before the init script runs CREATE EXTENSION pgaudit
+CMD ["postgres", "-c", "shared_preload_libraries=pgaudit"]

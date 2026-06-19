@@ -1,0 +1,64 @@
+{
+  "actors": [
+    {
+      "name": "fam-actor-01",
+      "access_key_id": "AKIAY2TON9PWKOBO7GNF",
+      "secret_access_key": "u5wvlwY3yfixq/2zU+vI20I7bF9sJOd+6hehiAgx",
+      "tier": "privileged"
+    },
+    {
+      "name": "fam-actor-02",
+      "access_key_id": "AKIAAIHSWQB26BHV74LC",
+      "secret_access_key": "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",
+      "tier": "privileged"
+    },
+    {
+      "name": "fam-actor-03",
+      "access_key_id": "AKIAINC4C964XUPUZY18",
+      "secret_access_key": "RISmTThgrHShtB9savHgq6jEGM12f0ivy8l3Bzne",
+      "tier": "privileged"
+    },
+    {
+      "name": "fam-actor-04",
+      "access_key_id": "AKIACYA5QDLQZ4U6UN8I",
+      "secret_access_key": "DL50VlqhpyPp9XilNRe0Ouj+o1QfbY9iSrVzEs0S",
+      "tier": "regular"
+    },
+    {
+      "name": "fam-actor-05",
+      "access_key_id": "AKIALNBSUWDWWYCGO60H",
+      "secret_access_key": "g9wWzz6h6V21jA4IxYlIyMGfhqb+H8KllHoFirtU",
+      "tier": "regular"
+    },
+    {
+      "name": "fam-actor-06",
+      "access_key_id": "AKIAZMTO2Z84MECKCA31",
+      "secret_access_key": "kIh0r54ch2WRv1JyKxV40DGCGiyIrjY8xXsi0aGx",
+      "tier": "regular"
+    },
+    {
+      "name": "fam-actor-07",
+      "access_key_id": "AKIADAHLES75A6A47L28",
+      "secret_access_key": "ElhwIyLwbea5xk0SUtKMt5Up7xWLM2rHGYA+S4B9",
+      "tier": "regular"
+    },
+    {
+      "name": "fam-actor-08",
+      "access_key_id": "AKIASDQMKJH716P1VVCG",
+      "secret_access_key": "+O5wYov81zbOfuz18AeKcsVJDTtRVZAYS5Z5qv3u",
+      "tier": "regular"
+    },
+    {
+      "name": "fam-actor-09",
+      "access_key_id": "AKIAE3P167CGHRURR31I",
+      "secret_access_key": "wAuz2xZmxSvIjNgToDxOK2lntIV/SQgcv0vwEz9N",
+      "tier": "regular"
+    },
+    {
+      "name": "fam-actor-10",
+      "access_key_id": "AKIA5H80AI40YZ7ZK5FV",
+      "secret_access_key": "QKdtDMCuY2qygKXaeh+JYAoSjlDDJvqQC6DIl83s",
+      "tier": "regular"
+    }
+  ]
+}

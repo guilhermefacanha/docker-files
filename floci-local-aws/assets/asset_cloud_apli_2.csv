@@ -1,0 +1,2 @@
+asset_id,asset_display_name,Server Type,Server IP,Server Host Name,Service Name,asset_source,admin_email,Server Port,auth_mechanism,location,region,access_id,secret_key,jsonar_uid_display_name,credentials_endpoint,service_endpoints.logs,service_endpoints.rds,service_endpoints.s3
+arn:aws:iam::111111111111,floci-local-aws-env1,AWS,arn:aws:iam::111111111111,192.168.51.40,arn:aws:iam::111111111111,AWS,dbadmin@company.com,4567,key,us-east-1,us-east-1,test,test,DSF-GW02,http://192.168.51.40:4567,http://192.168.51.40:4567,http://192.168.51.40:4567,http://192.168.51.40:4567

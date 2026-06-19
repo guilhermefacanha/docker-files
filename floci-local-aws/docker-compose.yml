@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  docker-proxy:
+    image: alpine/socat:latest
+    command: TCP-LISTEN:2375,reuseaddr,fork UNIX-CONNECT:/var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+
+  floci:
+    # Published from the local floci checkout with CloudTrail support.
+    # To rebuild locally instead of pulling: `docker compose build floci`
+    # (uncomment the build: block below).
+    image: guilhermefacanha/floci:cloudtrail
+    # build:
+    #   context: ../floci/floci
+    #   dockerfile: docker/Dockerfile
+    depends_on:
+      - docker-proxy
+    # Ports + account + network can be overridden per-environment via .env
+    # (or the file passed to `docker compose --env-file`). spawn-env.sh
+    # generates a .env.env<N> with non-overlapping values so multiple floci
+    # instances can run side-by-side.
+    ports:
+      - "${FLOCI_HOST_PORT:-4566}:4566"
+      - "${RDS_HOST_PORT_RANGE:-7001-7099}:${RDS_HOST_PORT_RANGE:-7001-7099}"   # RDS proxy ports
+    volumes:
+      - ./data:/app/data
+    environment:
+      FLOCI_DOCKER_DOCKER_HOST: tcp://docker-proxy:2375
+      FLOCI_SERVICES_DOCKER_NETWORK: "${FLOCI_NETWORK:-floci-local-aws_default}"
+      FLOCI_SERVICES_RDS_PROXY_BASE_PORT: "${RDS_PROXY_BASE_PORT:-7001}"
+      FLOCI_SERVICES_RDS_PROXY_MAX_PORT: "${RDS_PROXY_MAX_PORT:-7099}"
+      FLOCI_SERVICES_RDS_DEFAULT_POSTGRES_IMAGE: guilhermefacanha/postgres-pgaudit:16
+      # 000000000000 is floci's stock default. Override per env (e.g.
+      # 111111111111 for env 1) so emitted CloudTrail records carry a
+      # distinguishable account ID.
+      FLOCI_DEFAULT_ACCOUNT_ID: "${FLOCI_DEFAULT_ACCOUNT_ID:-000000000000}"
+      # 60s default — drop this to ~10 for faster local iteration.
+      FLOCI_SERVICES_CLOUDTRAIL_FLUSH_INTERVAL_SECONDS: "60"
+      # Persist IAM state (users, access keys) across container restarts so
+      # DSF/gateway credentials remain valid after docker compose restart.
+      # Without this the IAM store is wiped on every restart and the gateway
+      # gets InvalidAccessKeyId on its next ListObjectsV2 call.
+      FLOCI_STORAGE_MODE: "hybrid"
+    restart: always
+
+  rds-log-shipper:
+    build:
+      context: .
+      dockerfile: Dockerfile.log-shipper
+    depends_on:
+      floci:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      AWS_ENDPOINT_URL: http://floci:4566
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      POLL_INTERVAL: "10"
+      FLUSH_INTERVAL: "2"
+      BATCH_SIZE: "100"
+    restart: always
+
+networks:
+  default:
+    name: "${FLOCI_NETWORK:-floci-local-aws_default}"
