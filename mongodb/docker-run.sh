@@ -2,10 +2,13 @@
 
 _operation="some"
 _container="mongodb"
-_image="mongo:latest"
+_image="mongo:8.0.20"
 _build_image="mongodb:1.0"
+_volume=""  #"-v /my/host/path:/data/db"
+_envVars=" --env MONGO_INITDB_ROOT_USERNAME=admin --env MONGO_INITDB_ROOT_PASSWORD=admin "
 
-_port="27017"
+#port -p host:container_port
+_port=" -p 27017:27017"
 
 echo 'params: '$#
 echo "$@"
@@ -23,7 +26,7 @@ echo ' ==== '
 case "$_operation" in
     'create')
     	echo "=>creating $_container container: "
-		docker run -p $_port:27017 --name $_container --env MONGO_INITDB_ROOT_USERNAME="admin" --env MONGO_INITDB_ROOT_PASSWORD="admin" -d $_image
+		docker run -it $_port $_volume $_envVars --name $_container  -d $_image
 		
 		echo "MongoDb Created"
 	    echo "Host: localhost:$_port"
@@ -31,6 +34,7 @@ case "$_operation" in
 		echo "Password: admin"
 	    echo "You can use one of the following clients:"
 	    echo "MongoDB Compass: https://www.mongodb.com/products/compass"
+	    echo "mongosh --host localhost -u admin --authenticationDatabase admin admin"
     ;;
     'remove')
         docker rm -f $_container

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  jenkins-controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock # Mount Docker socket for Docker-in-Docker
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+    networks:
+      - jenkins-net
+
+  jenkins-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    privileged: true # needed for docker in docker in the worker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jenkins-net
+    depends_on:
+      - jenkins-controller
+
+networks:
+  jenkins-net:
+    driver: bridge
+
+volumes:
+  jenkins_home:

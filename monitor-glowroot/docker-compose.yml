@@ -1,0 +1,37 @@
+version: '3'
+services:
+  cassandra:
+    container_name: cassandra
+    image: cassandra:latest
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+    volumes:
+      - cassandra:/var/lib/cassandra
+    ports:
+      - "9042:9042"
+    networks:
+      - glowroot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  glowroot:
+    container_name: glowroot
+    image: glowroot/glowroot-central:0.14.1
+    ports:
+      - "4000:4000"
+      - "8181:8181"
+    volumes:
+      - ./files/glowroot-central.properties:/glowroot-central/glowroot-central.properties
+      - ./files/glowroot-central.properties:/usr/share/glowroot-central/glowroot-central.properties
+    networks:
+      - glowroot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  cassandra: {}
+
+networks:
+  glowroot_net:

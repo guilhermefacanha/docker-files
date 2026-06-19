@@ -1,12 +1,13 @@
 #!/bin/bash
 
 _operation="some"
-_container="postgres11"
-_image="postgres:11"
+_container="postgres17_2"
+_image="postgres:17"
 _build_image="postgres:1.0"
-_volume=/Users/guilhermefacanha/workspace/docker/postgresql11/data
+_volume=/Users/guilhermelimafacanha/workspace/docker/postgres/data2
 
-_port="5432"
+_port="5433"
+_hostnet=" --add-host=host.docker.internal:host-gateway "
 
 echo 'params: '$#
 echo "$@"
@@ -24,7 +25,7 @@ echo ' ==== '
 case "$_operation" in
     'create')
     	echo "=>creating $_container container: "
-		docker run -p $_port:$_port --name $_container --restart unless-stopped -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=1234 -v $_volume:/var/lib/postgresql/data -d $_image
+		docker run -p $_port:5432 $_hostnet --name $_container --restart unless-stopped -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e PGDATA=/var/lib/postgresql/data/pgdata -v $_volume:/var/lib/postgresql/data -d $_image
 		
 		echo "Postgres Created"
 	    echo "Container: $_container"

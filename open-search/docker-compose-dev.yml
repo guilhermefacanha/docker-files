@@ -1,0 +1,49 @@
+services:
+  opensearch-dev:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch-dev
+    restart: always
+    environment:
+      - cluster.name=opensearch-dev-cluster
+      - node.name=opensearch-dev-node
+      - discovery.type=single-node # Single node cluster
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Lower memory requirements for dev
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data-dev:/usr/share/opensearch/data
+    ports:
+      - 9200:9200 # REST API
+      - 9600:9600 # Performance Analyzer
+    networks:
+      - opensearch-net-dev
+
+  opensearch-dashboards-dev:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: opensearch-dashboards-dev
+    restart: always
+    ports:
+      - 5601:5601
+    expose:
+      - "5601"
+    environment:
+      - 'OPENSEARCH_HOSTS=["https://opensearch-dev:9200"]'
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
+    networks:
+      - opensearch-net-dev
+    depends_on:
+      - opensearch-dev
+
+volumes:
+  opensearch-data-dev:
+
+networks:
+  opensearch-net-dev:
+

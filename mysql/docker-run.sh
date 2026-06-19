@@ -1,4 +1,4 @@
-#!/bin/bash
+jdbc:mysql://localhost:3306/mysql?allowPublicKeyRetrieval=true&useSSL=false#!/bin/bash
 
 _operation="some"
 _container="mysql"
