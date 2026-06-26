@@ -1,0 +1,1 @@
+export $(grep -v '^#' .env | xargs) && nohup python3 06-simulate-activity.py > activity.log 2>&1 &
