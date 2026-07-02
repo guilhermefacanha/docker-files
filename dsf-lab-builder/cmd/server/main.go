@@ -15,15 +15,25 @@ func main() {
 	// Override with env vars if needed (e.g. running binary from a different directory).
 	cwd, _ := os.Getwd()
 
-	workspace := envOr("WORKSPACE", filepath.Join(cwd, "workspace"))
-	scriptsDir := envOr("SCRIPTS_DIR", filepath.Join(cwd, "scripts"))
-	staticDir := envOr("STATIC_DIR", filepath.Join(cwd, "static"))
+	// If run from the parent directory (e.g. GoLand sets cwd to docker-files/),
+	// fall back to the dsf-lab-builder subdirectory.
+	root := cwd
+	if !dirExists(filepath.Join(cwd, "static")) && dirExists(filepath.Join(cwd, "dsf-lab-builder", "static")) {
+		root = filepath.Join(cwd, "dsf-lab-builder")
+		log.Printf("  auto-root      : %s", root)
+	}
+
+	workspace := envOr("WORKSPACE", filepath.Join(root, "workspace"))
+	scriptsDir := envOr("SCRIPTS_DIR", filepath.Join(root, "scripts"))
+	gcpScriptsDir := envOr("GCP_SCRIPTS_DIR", filepath.Join(root, "scripts", "gcp"))
+	staticDir := envOr("STATIC_DIR", filepath.Join(root, "static"))
 	port := envOr("PORT", "8080")
 
 	cfg := &env.Config{
-		Workspace:  workspace,
-		ScriptsDir: scriptsDir,
-		MaxSlots:   5,
+		Workspace:     workspace,
+		ScriptsDir:    scriptsDir,
+		GCPScriptsDir: gcpScriptsDir,
+		MaxSlots:      5,
 	}
 
 	mux := http.NewServeMux()
@@ -32,8 +42,11 @@ func main() {
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
 	log.Printf("DSF Lab Builder  http://localhost:%s", port)
-	log.Printf("  workspace : %s", workspace)
-	log.Printf("  scripts   : %s", scriptsDir)
+	log.Printf("  cwd            : %s", cwd)
+	log.Printf("  workspace      : %s  (exists=%v)", workspace, dirExists(workspace))
+	log.Printf("  scripts        : %s  (exists=%v)", scriptsDir, dirExists(scriptsDir))
+	log.Printf("  gcp-scripts    : %s  (exists=%v)", gcpScriptsDir, dirExists(gcpScriptsDir))
+	log.Printf("  static         : %s  (exists=%v)", staticDir, dirExists(staticDir))
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatal(err)
 	}
@@ -44,4 +57,9 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }

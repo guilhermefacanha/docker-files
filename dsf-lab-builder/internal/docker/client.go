@@ -9,13 +9,27 @@ import (
 	"strings"
 )
 
+// GCPSlotFromID returns the numeric slot for a GCP compose project name, e.g. "floci-gcp2" → 2.
+func GCPSlotFromID(id string) int {
+	if !strings.HasPrefix(id, "floci-gcp") {
+		return 0
+	}
+	n, _ := strconv.Atoi(id[len("floci-gcp"):])
+	return n
+}
+
+func gcpProjectID(slot int) string {
+	return fmt.Sprintf("floci-gcp-lab-%d", slot)
+}
+
 type EnvSummary struct {
 	ID           string `json:"id"`
+	Cloud        string `json:"cloud"` // "aws" or "gcp"
 	Slot         int    `json:"slot"`
 	Status       string `json:"status"`
 	FlociPort    int    `json:"flociPort"`
-	RDSPortRange string `json:"rdsPortRange"`
-	AccountID    string `json:"accountId"`
+	RDSPortRange string `json:"rdsPortRange"` // also used as Cloud SQL port range for GCP
+	AccountID    string `json:"accountId"`    // AWS account ID or GCP project ID
 	Network      string `json:"network"`
 }
 
@@ -33,8 +47,9 @@ func ListEnvs() ([]EnvSummary, error) {
 	}
 
 	type projectData struct {
-		flociLine *psLine
-		anyState  string
+		flociLine    *psLine
+		flociService string // "floci" for AWS, "floci-gcp" for GCP
+		anyState     string
 	}
 	projects := map[string]*projectData{}
 
@@ -57,23 +72,39 @@ func ListEnvs() ([]EnvSummary, error) {
 		if pd.anyState == "" || c.State == "running" {
 			pd.anyState = c.State
 		}
-		if labelVal(c.Labels, "com.docker.compose.service") == "floci" {
+		svc := labelVal(c.Labels, "com.docker.compose.service")
+		if svc == "floci" || svc == "floci-gcp" {
 			pd.flociLine = &c
+			pd.flociService = svc
 		}
 	}
 
 	var envs []EnvSummary
 	for project, pd := range projects {
+		cloud := "aws"
+		if strings.HasPrefix(project, "floci-gcp") {
+			cloud = "gcp"
+		}
 		env := EnvSummary{
 			ID:      project,
+			Cloud:   cloud,
 			Slot:    slotFromProject(project),
 			Status:  normalizeState(pd.anyState),
 			Network: project + "_default",
 		}
-		env.AccountID = accountID(env.Slot)
+		if cloud == "gcp" {
+			env.AccountID = gcpProjectID(env.Slot)
+		} else {
+			env.AccountID = accountID(env.Slot)
+		}
 		if pd.flociLine != nil {
-			env.FlociPort = flociPort(pd.flociLine.Ports)
-			env.RDSPortRange = rdsRange(pd.flociLine.Ports)
+			if pd.flociService == "floci-gcp" {
+				env.FlociPort = gcpPort(pd.flociLine.Ports)
+				env.RDSPortRange = rdsRange(pd.flociLine.Ports)
+			} else {
+				env.FlociPort = flociPort(pd.flociLine.Ports)
+				env.RDSPortRange = rdsRange(pd.flociLine.Ports)
+			}
 			env.Status = normalizeState(pd.flociLine.State)
 		}
 		envs = append(envs, env)
@@ -123,10 +154,18 @@ func isFlociProject(p string) bool {
 		n, err := strconv.Atoi(rest)
 		return err == nil && n >= 1 && n <= 5
 	}
+	if strings.HasPrefix(p, "floci-gcp") {
+		rest := p[len("floci-gcp"):]
+		n, err := strconv.Atoi(rest)
+		return err == nil && n >= 1 && n <= 5
+	}
 	return false
 }
 
 func slotFromProject(p string) int {
+	if strings.HasPrefix(p, "floci-gcp") {
+		return GCPSlotFromID(p)
+	}
 	return SlotFromID(p)
 }
 
@@ -150,6 +189,20 @@ func flociPort(ports string) int {
 	for _, part := range strings.Split(ports, ",") {
 		part = strings.TrimSpace(part)
 		if strings.Contains(part, "->4566/tcp") {
+			host := strings.Split(part, "->")[0]
+			host = strings.TrimPrefix(host, "0.0.0.0:")
+			host = strings.TrimPrefix(host, "::")
+			p, _ := strconv.Atoi(host)
+			return p
+		}
+	}
+	return 0
+}
+
+func gcpPort(ports string) int {
+	for _, part := range strings.Split(ports, ",") {
+		part = strings.TrimSpace(part)
+		if strings.Contains(part, "->4588/tcp") {
 			host := strings.Split(part, "->")[0]
 			host = strings.TrimPrefix(host, "0.0.0.0:")
 			host = strings.TrimPrefix(host, "::")

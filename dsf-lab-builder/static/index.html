@@ -31,6 +31,19 @@
   </div>
 </div>
 
+<!-- Cloud SQL Detail Offcanvas -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="cloudSQLOffcanvas" style="width:520px">
+  <div class="offcanvas-header border-bottom border-secondary-subtle">
+    <h6 class="offcanvas-title font-monospace" id="cloudSQLOffcanvasTitle">Cloud SQL Info</h6>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" title="Close panel"></button>
+  </div>
+  <div class="offcanvas-body p-0" id="cloudSQLOffcanvasBody">
+    <div class="d-flex justify-content-center align-items-center p-5">
+      <div class="spinner-border spinner-border-sm text-info"></div>
+    </div>
+  </div>
+</div>
+
 <!-- RDS Detail Offcanvas -->
 <div class="offcanvas offcanvas-end" tabindex="-1" id="rdsOffcanvas" style="width:500px">
   <div class="offcanvas-header border-bottom border-secondary-subtle">
@@ -100,10 +113,16 @@
 <template id="tpl-home">
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0"><i class="bi bi-grid-3x3-gap me-2 text-info"></i>Environments</h4>
-    <button class="btn btn-info btn-sm" id="btn-deploy"
-            title="Deploy a new isolated Floci (LocalStack) environment">
-      <i class="bi bi-plus-circle me-1"></i>Deploy New Env
-    </button>
+    <div class="d-flex gap-2">
+      <button class="btn btn-info btn-sm" id="btn-deploy"
+              title="Deploy a new isolated AWS Floci (LocalStack) environment">
+        <i class="bi bi-plus-circle me-1"></i>Deploy AWS Env
+      </button>
+      <button class="btn btn-outline-warning btn-sm" id="btn-deploy-gcp"
+              title="Deploy a new isolated GCP Floci environment">
+        <i class="bi bi-google me-1"></i>Deploy GCP Env
+      </button>
+    </div>
   </div>
   <div id="env-grid" class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
     <div class="col"><div class="card h-100 text-center py-5 text-secondary border-dashed">
@@ -342,6 +361,83 @@
       </div>
     </div>
 
+  </div>
+</template>
+
+<template id="tpl-gcp-env-detail">
+  <div class="mb-3">
+    <a href="#" class="text-decoration-none text-secondary small">
+      <i class="bi bi-chevron-left me-1"></i>All Environments
+    </a>
+  </div>
+  <div class="card mb-4">
+    <div class="card-body d-flex flex-wrap gap-3 align-items-center">
+      <span class="badge bg-warning text-dark me-1"><i class="bi bi-google me-1"></i>GCP</span>
+      <h5 class="mb-0 me-3 fw-bold text-warning" id="gcp-detail-title"></h5>
+      <span class="badge" id="gcp-detail-status"></span>
+      <div class="ms-auto d-flex gap-3 small font-monospace">
+        <span title="floci-gcp port"><i class="bi bi-hdd-network me-1 text-secondary"></i><span id="gcp-detail-port"></span></span>
+        <span title="GCP Project ID"><i class="bi bi-folder me-1 text-secondary"></i><span id="gcp-detail-project"></span></span>
+        <span title="Docker network name"><i class="bi bi-diagram-3 me-1 text-secondary"></i><span id="gcp-detail-network"></span></span>
+      </div>
+    </div>
+  </div>
+  <ul class="nav nav-tabs mb-3" id="gcp-detail-tabs">
+    <li class="nav-item"><a class="nav-link active" data-gcp-tab="cloudsql" href="#">Cloud SQL</a></li>
+    <li class="nav-item"><a class="nav-link" data-gcp-tab="create-cloudsql" href="#">Create Cloud SQL</a></li>
+    <li class="nav-item"><a class="nav-link" data-gcp-tab="gcp-generator" href="#">Data Generator</a></li>
+  </ul>
+  <div id="gcp-detail-tab-content"></div>
+</template>
+
+<template id="tpl-tab-cloudsql">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-database me-2 text-warning"></i>Cloud SQL Instances</span>
+      <button class="btn btn-sm btn-outline-secondary" id="btn-refresh-gcp-detail"
+              title="Refresh Cloud SQL instance list">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0">
+        <thead><tr><th>ID</th><th>Engine</th><th>Status</th><th>Endpoint</th><th class="text-center" style="width:100px">Actions</th></tr></thead>
+        <tbody id="cloudsql-tbody"><tr><td colspan="5" class="text-center text-secondary p-3">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-tab-create-cloudsql">
+  <div class="card" style="max-width:480px">
+    <div class="card-header"><i class="bi bi-plus-circle me-2 text-warning"></i>Create Cloud SQL Instance</div>
+    <div class="card-body">
+      <div class="mb-3">
+        <label class="form-label">Engine</label>
+        <select class="form-select" id="cloudsql-engine">
+          <option value="postgres">PostgreSQL</option>
+        </select>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-warning" id="btn-create-cloudsql"
+                title="Create the selected Cloud SQL engine and stream the setup output">
+          <i class="bi bi-play-fill me-1"></i>Create &amp; Stream Output
+        </button>
+        <button class="btn btn-outline-info" id="btn-cloudsql-info"
+                title="Preview the curl commands that will run">
+          <i class="bi bi-info-circle"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-tab-gcp-generator">
+  <div class="card">
+    <div class="card-header"><i class="bi bi-database me-2 text-warning"></i>Cloud SQL Instance Generators</div>
+    <div class="card-body" id="cloudsql-gen-body">
+      <p class="text-secondary small">Loading Cloud SQL instances…</p>
+    </div>
   </div>
 </template>
 

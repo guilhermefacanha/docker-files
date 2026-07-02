@@ -45,14 +45,16 @@ type labUser struct {
 }
 
 type rdsGen struct {
-	mu         sync.Mutex
-	stats      RDSGenStats
-	lines      []string // rolling in-memory log (last 200 lines)
-	stop       chan struct{}
-	logFile    *os.File
-	adminDB    *sql.DB   // admin connection for DDL, GRANT, REVOKE
-	users      []labUser // rotating pool: lab_admin, lab_writer, lab_reader
-	instanceID string    // RDS instance ID — used for docker exec root fallback
+	mu           sync.Mutex
+	stats        RDSGenStats
+	lines        []string // rolling in-memory log (last 200 lines)
+	stop         chan struct{}
+	logFile      *os.File
+	adminDB      *sql.DB   // admin connection for DDL, GRANT, REVOKE
+	users        []labUser // rotating pool: lab_admin, lab_writer, lab_reader
+	instanceID   string    // RDS instance ID — used for docker exec root fallback
+	masterUser   string    // overrides "admin" default (e.g. "postgres" for GCP)
+	masterPass   string    // overrides "secret123" default
 }
 
 var (
@@ -158,6 +160,13 @@ func (g *rdsGen) run(engine, host, port string) {
 		}
 	}()
 
+	if g.masterUser == "" {
+		g.masterUser = "admin"
+	}
+	if g.masterPass == "" {
+		g.masterPass = "secret123"
+	}
+
 	g.logLine(fmt.Sprintf("=== RDS Generator started  engine=%s  endpoint=%s:%s ===", engine, host, port))
 
 	if engine != "postgres" {
@@ -168,14 +177,14 @@ func (g *rdsGen) run(engine, host, port string) {
 		}
 	}
 
-	db, err := openDB(engine, host, port, "admin", "secret123", dbForEngine(engine))
+	db, err := openDB(engine, host, port, g.masterUser, g.masterPass, dbForEngine(engine))
 	if err != nil {
 		g.logLine("[ERROR] Cannot connect: " + err.Error())
 		g.logLine("[INFO]  Make sure the RDS instance status is 'available' in the Resources tab.")
 		return
 	}
 	g.adminDB = db
-	g.logLine(fmt.Sprintf("[OK  ] Connected as admin to %s@%s:%s/%s", engine, host, port, dbForEngine(engine)))
+	g.logLine(fmt.Sprintf("[OK  ] Connected as %s to %s@%s:%s/%s", g.masterUser, engine, host, port, dbForEngine(engine)))
 
 	g.setupSchema(engine)
 	g.setupUsers(engine, host, port)

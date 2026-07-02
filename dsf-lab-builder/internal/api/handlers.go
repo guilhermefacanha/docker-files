@@ -47,6 +47,22 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Asset export
 	mux.HandleFunc("GET /api/envs/{id}/export", h.exportAssets)
 
+	// GCP env lifecycle
+	mux.HandleFunc("POST /api/gcp-envs", h.deployGCPEnv)
+	mux.HandleFunc("GET /api/gcp-envs/{id}", h.getGCPEnv)
+	mux.HandleFunc("DELETE /api/gcp-envs/{id}", h.deleteGCPEnv)
+
+	// Cloud SQL
+	mux.HandleFunc("GET /api/gcp-envs/{id}/cloudsql/suggest", h.suggestCloudSQL) // ?engine=X
+	mux.HandleFunc("GET /api/gcp-envs/{id}/cloudsql/detail", h.getCloudSQLDetail) // ?instance=X
+	mux.HandleFunc("POST /api/gcp-envs/{id}/cloudsql", h.createCloudSQL)
+	mux.HandleFunc("POST /api/gcp-envs/{id}/test/cloudsql/{engine}", h.testCloudSQL)
+
+	// Cloud SQL background generator
+	mux.HandleFunc("POST /api/gcp-envs/{id}/generator/cloudsql/start", h.startCloudSQLGenerator)
+	mux.HandleFunc("POST /api/gcp-envs/{id}/generator/cloudsql/stop", h.stopCloudSQLGenerator)
+	mux.HandleFunc("GET /api/gcp-envs/{id}/generator/cloudsql/logs", h.getCloudSQLGeneratorLogs)
+
 	// Job streaming
 	mux.HandleFunc("GET /api/jobs/{id}", h.getJob)
 	mux.HandleFunc("GET /api/jobs/{id}/stream", h.streamJob)
@@ -374,6 +390,206 @@ func (h *Handler) exportAssets(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+// ── GCP env lifecycle ─────────────────────────────────────────────────────────
+
+func (h *Handler) deployGCPEnv(w http.ResponseWriter, r *http.Request) {
+	slot, err := env.DetectNextGCPSlot(h.Cfg)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	job := env.DeployGCP(slot, h.Cfg)
+	writeJSON(w, map[string]string{"jobId": job.ID})
+}
+
+func (h *Handler) getGCPEnv(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	envs, err := docker.ListEnvs()
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	for _, e := range envs {
+		if e.ID == id && e.Cloud == "gcp" {
+			detail, err := env.GetGCPDetail(e, h.Cfg)
+			if err != nil {
+				writeError(w, 500, err.Error())
+				return
+			}
+			writeJSON(w, detail)
+			return
+		}
+	}
+	writeError(w, 404, "GCP env not found: "+id)
+}
+
+func (h *Handler) deleteGCPEnv(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	slot := docker.GCPSlotFromID(id)
+	if slot == 0 {
+		writeError(w, 400, "invalid GCP env ID: "+id)
+		return
+	}
+	job := env.DestroyGCP(slot, h.Cfg)
+	writeJSON(w, map[string]string{"jobId": job.ID})
+}
+
+// ── Cloud SQL ─────────────────────────────────────────────────────────────────
+
+func (h *Handler) createCloudSQL(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Engine     string `json:"engine"`
+		InstanceID string `json:"instanceId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Engine == "" {
+		writeError(w, 400, `body must be {"engine":"postgres|mysql","instanceId":"..."}`)
+		return
+	}
+	e, err := findGCPEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+
+	if body.InstanceID == "" {
+		existing, suggested, err := env.SuggestNextCloudSQL(e, body.Engine)
+		if err != nil {
+			writeError(w, 500, err.Error())
+			return
+		}
+		if len(existing) > 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"confirm":   true,
+				"existing":  existing,
+				"suggested": suggested,
+			})
+			return
+		}
+		body.InstanceID = suggested
+	}
+
+	job, err := env.CreateCloudSQL(e, body.Engine, body.InstanceID, h.Cfg)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"jobId": job.ID, "instanceId": body.InstanceID})
+}
+
+func (h *Handler) suggestCloudSQL(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	engine := r.URL.Query().Get("engine")
+	if engine == "" {
+		writeError(w, 400, "engine query param required")
+		return
+	}
+	e, err := findGCPEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	existing, suggested, err := env.SuggestNextCloudSQL(e, engine)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]interface{}{"existing": existing, "suggested": suggested})
+}
+
+func (h *Handler) testCloudSQL(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	engine := r.PathValue("engine")
+	var body struct {
+		InstanceID string `json:"instanceId"`
+	}
+	json.NewDecoder(r.Body).Decode(&body) //nolint
+	e, err := findGCPEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	job, err := env.TestCloudSQL(e, engine, body.InstanceID, h.Cfg)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"jobId": job.ID})
+}
+
+func (h *Handler) getCloudSQLDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	instanceID := r.URL.Query().Get("instance")
+	if instanceID == "" {
+		writeError(w, 400, "instance query param required")
+		return
+	}
+	e, err := findGCPEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	detail, err := env.GetCloudSQLDetail(e, instanceID, h.Cfg)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, detail)
+}
+
+// ── Cloud SQL generator ───────────────────────────────────────────────────────
+
+func (h *Handler) startCloudSQLGenerator(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		InstanceID string `json:"instanceId"`
+	}
+	json.NewDecoder(r.Body).Decode(&body) //nolint
+	e, err := findGCPEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	detail, err := env.GetCloudSQLDetail(e, body.InstanceID, h.Cfg)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if detail.ProxyPort == 0 {
+		writeError(w, 400, "no host proxy running for this instance — create the Cloud SQL instance first")
+		return
+	}
+	if err := env.StartGCPGen(id, body.InstanceID, detail.ProxyPort, h.Cfg); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"ok": "true", "key": env.GCPGenKey(id, body.InstanceID)})
+}
+
+func (h *Handler) stopCloudSQLGenerator(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		InstanceID string `json:"instanceId"`
+	}
+	json.NewDecoder(r.Body).Decode(&body) //nolint
+	key := env.GCPGenKey(id, body.InstanceID)
+	if err := env.StopGCPGen(key); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"ok": "true"})
+}
+
+func (h *Handler) getCloudSQLGeneratorLogs(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	instanceID := r.URL.Query().Get("instance")
+	key := env.GCPGenKey(id, instanceID)
+	lines, running, stats := env.GetGCPGenStatus(key, 100)
+	writeJSON(w, map[string]any{"running": running, "lines": lines, "stats": stats})
+}
+
 // ── jobs ──────────────────────────────────────────────────────────────────────
 
 func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {
@@ -420,6 +636,19 @@ func findEnv(id string) (docker.EnvSummary, error) {
 		}
 	}
 	return docker.EnvSummary{}, fmt.Errorf("env not found: %s", id)
+}
+
+func findGCPEnv(id string) (docker.EnvSummary, error) {
+	envs, err := docker.ListEnvs()
+	if err != nil {
+		return docker.EnvSummary{}, err
+	}
+	for _, e := range envs {
+		if e.ID == id && e.Cloud == "gcp" {
+			return e, nil
+		}
+	}
+	return docker.EnvSummary{}, fmt.Errorf("GCP env not found: %s", id)
 }
 
 func slotFromID(id string) int {

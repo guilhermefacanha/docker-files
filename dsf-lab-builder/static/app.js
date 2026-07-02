@@ -34,6 +34,9 @@ function navigate(hash) {
   } else if (hash.startsWith('#/env/')) {
     App.currentEnvId = decodeURIComponent(hash.slice(6));
     showEnvDetail(App.currentEnvId);
+  } else if (hash.startsWith('#/gcp-env/')) {
+    App.currentEnvId = decodeURIComponent(hash.slice(10));
+    showGCPEnvDetail(App.currentEnvId);
   } else {
     showHome();
   }
@@ -52,6 +55,7 @@ function showHome() {
   const tpl = document.getElementById('tpl-home').content.cloneNode(true);
   $('#main-content').empty().append(tpl);
   $('#btn-deploy').on('click', deployNewEnv);
+  $('#btn-deploy-gcp').on('click', deployNewGCPEnv);
   loadEnvs();
   App.refreshTimer = setInterval(loadEnvs, 5000);
 }
@@ -75,26 +79,29 @@ function renderEnvGrid(envs) {
     return;
   }
   envs.forEach(env => {
+    const isGCP = env.cloud === 'gcp';
     const tpl = document.getElementById('tpl-env-card').content.cloneNode(true);
     const $card = $(tpl).find('.card');
     $card.attr('data-env-id', env.id);
-    $card.find('.env-name').text(labelForEnv(env));
+    const cloudBadge = isGCP
+      ? '<span class="badge bg-warning text-dark me-1" style="font-size:.65em"><i class="bi bi-google"></i> GCP</span>'
+      : '<span class="badge bg-info text-dark me-1" style="font-size:.65em">AWS</span>';
+    $card.find('.env-name').html(cloudBadge + esc(labelForEnv(env)));
     $card.find('.env-port').text(env.flociPort || '—');
     $card.find('.env-account').text(env.accountId || '—');
     $card.find('.env-rds-range').text(env.rdsPortRange || '—');
     const $badge = $card.find('.env-status-badge');
     $badge.text(env.status).addClass(statusBadgeClass(env.status));
-    $card.find('.btn-open').on('click', () => {
-      window.location.hash = '#/env/' + encodeURIComponent(env.id);
-    });
+    const envHash = isGCP
+      ? '#/gcp-env/' + encodeURIComponent(env.id)
+      : '#/env/' + encodeURIComponent(env.id);
+    $card.find('.btn-open').on('click', () => { window.location.hash = envHash; });
     $card.find('.btn-destroy').on('click', e => {
       e.stopPropagation();
-      destroyEnv(env);
+      if (isGCP) destroyGCPEnv(env); else destroyEnv(env);
     });
     $card.on('click', function (e) {
-      if (!$(e.target).is('button, a')) {
-        window.location.hash = '#/env/' + encodeURIComponent(env.id);
-      }
+      if (!$(e.target).is('button, a')) window.location.hash = envHash;
     });
     const $col = $('<div class="col">').append($card);
     $grid.append($col);
@@ -102,6 +109,7 @@ function renderEnvGrid(envs) {
 }
 
 function deployNewEnv() {
+  if (!confirm('Deploy a new AWS environment?\nThis will start floci-aws and supporting containers.')) return;
   const $btn = $('#btn-deploy').prop('disabled', true)
     .html('<span class="spinner-border spinner-border-sm me-1"></span>Deploying…');
   $.post('/api/envs')
@@ -115,11 +123,441 @@ function deployNewEnv() {
     });
 }
 
+function deployNewGCPEnv() {
+  if (!confirm('Deploy a new GCP environment?\nThis will start floci-gcp and supporting containers.')) return;
+  const $btn = $('#btn-deploy-gcp').prop('disabled', true)
+    .html('<span class="spinner-border spinner-border-sm me-1"></span>Deploying…');
+  $.post('/api/gcp-envs')
+    .done(res => {
+      $btn.prop('disabled', false).html('<i class="bi bi-google me-1"></i>Deploy GCP Env');
+      openJobModal('Deploying New GCP Environment', res.jobId, () => loadEnvs());
+    })
+    .fail(xhr => {
+      $btn.prop('disabled', false).html('<i class="bi bi-google me-1"></i>Deploy GCP Env');
+      showToast('GCP Deploy failed: ' + apiError(xhr), 'danger');
+    });
+}
+
+function destroyGCPEnv(env) {
+  if (!confirm(`Destroy ${labelForEnv(env)}?\nThis will stop all containers and remove all data. This cannot be undone.`)) return;
+  $.ajax({ url: '/api/gcp-envs/' + encodeURIComponent(env.id), method: 'DELETE' })
+    .done(res => openJobModal('Destroying ' + labelForEnv(env), res.jobId, () => loadEnvs()))
+    .fail(xhr => showToast('Destroy failed: ' + apiError(xhr), 'danger'));
+}
+
 function destroyEnv(env) {
   if (!confirm(`Destroy ${labelForEnv(env)}?\nThis will stop all containers and remove all data. This cannot be undone.`)) return;
   $.ajax({ url: '/api/envs/' + encodeURIComponent(env.id), method: 'DELETE' })
     .done(res => openJobModal('Destroying ' + labelForEnv(env), res.jobId, () => loadEnvs()))
     .fail(xhr => showToast('Destroy failed: ' + apiError(xhr), 'danger'));
+}
+
+/* ── GCP Env Detail page ────────────────────────────────────────────── */
+function showGCPEnvDetail(envId) {
+  setBreadcrumb(envId);
+  const tpl = document.getElementById('tpl-gcp-env-detail').content.cloneNode(true);
+  $('#main-content').empty().append(tpl);
+  $('#main-content a[href="#"]').first().on('click', e => {
+    e.preventDefault();
+    window.location.hash = '#';
+  });
+  $('#gcp-detail-tabs').on('click', 'a.nav-link', function (e) {
+    e.preventDefault();
+    $('#gcp-detail-tabs a.nav-link').removeClass('active');
+    $(this).addClass('active');
+    loadGCPTab($(this).data('gcpTab'), envId);
+  });
+  loadGCPEnvHeader(envId);
+  loadGCPTab('cloudsql', envId);
+  App.refreshTimer = setInterval(() => {
+    if ($('[data-gcp-tab="cloudsql"]').hasClass('active') || !$('#gcp-detail-tabs .nav-link.active').length) {
+      refreshCloudSQLResources(envId);
+    }
+  }, 8000);
+}
+
+function loadGCPEnvHeader(envId) {
+  $.getJSON('/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
+    $('#gcp-detail-title').text(labelForEnv(d));
+    $('#gcp-detail-status').text(d.status).removeClass().addClass('badge ' + statusBadgeClass(d.status));
+    $('#gcp-detail-port').text(d.flociPort || '—');
+    $('#gcp-detail-project').text(d.accountId || '—');
+    $('#gcp-detail-network').text(d.network || '—');
+  });
+}
+
+function loadGCPTab(tab, envId) {
+  const $content = $('#gcp-detail-tab-content');
+  const tplId = tab === 'cloudsql' ? 'tpl-tab-cloudsql'
+              : tab === 'gcp-generator' ? 'tpl-tab-gcp-generator'
+              : 'tpl-tab-create-cloudsql';
+  const tpl = document.getElementById(tplId);
+  if (!tpl) return;
+  if (App.gcpGenTimer) { clearInterval(App.gcpGenTimer); App.gcpGenTimer = null; }
+  $content.empty().append(tpl.content.cloneNode(true));
+  switch (tab) {
+    case 'cloudsql':        initTabCloudSQL(envId); break;
+    case 'create-cloudsql': initTabCreateCloudSQL(envId); break;
+    case 'gcp-generator':   initTabGCPGenerator(envId); break;
+  }
+}
+
+/* ── Cloud SQL resources tab ────────────────────────────────────────── */
+function initTabCloudSQL(envId) {
+  refreshCloudSQLResources(envId);
+  $('#btn-refresh-gcp-detail').on('click', () => refreshCloudSQLResources(envId));
+}
+
+function refreshCloudSQLResources(envId) {
+  $.getJSON('/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
+    renderCloudSQLTable(d.cloudSQL || [], envId);
+  });
+}
+
+function renderCloudSQLTable(rows, envId) {
+  const $tbody = $('#cloudsql-tbody').empty();
+  if (!rows.length) {
+    $tbody.append('<tr><td colspan="5" class="text-center text-secondary p-3">No Cloud SQL instances — create one in the Create Cloud SQL tab</td></tr>');
+    return;
+  }
+  rows.forEach(r => {
+    const eng = r.engine || '—';
+    $tbody.append(`<tr>
+      <td class="font-monospace small">${esc(r.id)}</td>
+      <td><span class="badge bg-warning text-dark">${esc(eng)}</span></td>
+      <td><span class="badge ${r.status === 'RUNNABLE' ? 'bg-success' : 'bg-secondary'}">${esc(r.status)}</span></td>
+      <td class="font-monospace small">${esc(r.endpoint)}</td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-outline-info btn-cloudsql-info me-1"
+                data-instance="${esc(r.id)}"
+                title="Show full Cloud SQL instance info: Pub/Sub, credentials, DSF onboarding details">
+          <i class="bi bi-info-circle"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-secondary btn-test-cloudsql"
+                data-engine="${esc(eng)}" data-instance="${esc(r.id)}"
+                title="Run Pub/Sub audit log test against this Cloud SQL instance and stream output">
+          <i class="bi bi-lightning"></i>
+        </button>
+      </td>
+    </tr>`);
+  });
+  $tbody.find('.btn-cloudsql-info').on('click', function () {
+    showCloudSQLDetail(envId, $(this).data('instance'));
+  });
+  $tbody.find('.btn-test-cloudsql').on('click', function () {
+    const eng = $(this).data('engine');
+    const inst = $(this).data('instance');
+    $.ajax({
+      url: `/api/gcp-envs/${encodeURIComponent(envId)}/test/cloudsql/${eng}`,
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ instanceId: inst }),
+    })
+      .done(res => openJobModal(`Test Cloud SQL — ${inst}`, res.jobId))
+      .fail(xhr => showToast(apiError(xhr), 'danger'));
+  });
+}
+
+function showCloudSQLDetail(envId, instanceId) {
+  document.getElementById('cloudSQLOffcanvasTitle').textContent = instanceId;
+  document.getElementById('cloudSQLOffcanvasBody').innerHTML =
+    '<div class="d-flex justify-content-center p-5"><div class="spinner-border spinner-border-sm text-info"></div></div>';
+
+  const oc = new bootstrap.Offcanvas(document.getElementById('cloudSQLOffcanvas'));
+  oc.show();
+
+  $.getJSON(`/api/gcp-envs/${encodeURIComponent(envId)}/cloudsql/detail?instance=${encodeURIComponent(instanceId)}`)
+    .done(d => renderCloudSQLDetailPanel(d))
+    .fail(xhr => {
+      document.getElementById('cloudSQLOffcanvasBody').innerHTML =
+        `<div class="p-3 text-danger">${esc(apiError(xhr))}</div>`;
+    });
+}
+
+function renderCloudSQLDetailPanel(d) {
+  const endpointDisplay = d.endpoint && d.endpoint !== ':0'
+    ? d.endpoint.replace('localhost', App.serverIP)
+    : '(starting…)';
+  const rows = [
+    ['Instance ID',      d.id],
+    ['Engine',           `${d.engine} (${d.engineVersion || ''})`.replace(' ()', '')],
+    ['Status',           d.status],
+    ['Project ID',       d.projectId],
+    ['Region',           d.region],
+    ['Endpoint',         endpointDisplay],
+    d.proxyPort ? ['DBeaver / Host Access', `${(d.proxyHost||'localhost').replace('localhost', App.serverIP)}:${d.proxyPort}`] : null,
+    ['Master User',      d.masterUser],
+    ['Master Password',  d.masterPass],
+    ['Audit User',       d.auditUser],
+    ['Audit Password',   d.auditPass],
+    null,
+    ['Pub/Sub Topic',       d.topicName],
+    ['Pub/Sub Subscription', d.subscriptionId],
+    ['Log Sink Name',       d.logSinkName],
+    ['Service Account',     d.serviceAccount],
+    ['Floci Endpoint URL',  (d.flociEndpoint || '').replace('localhost', App.serverIP)],
+  ];
+
+  let html = '<div class="alert alert-info mx-3 mt-3 small py-2">' +
+    '<i class="bi bi-info-circle me-1"></i>' +
+    '<strong>DSF Hub onboarding:</strong> Use the Pub/Sub Subscription as the log aggregator asset. ' +
+    'Auth: Service Account key (from setup output).</div>';
+  html += '<table class="table table-sm fam-info-table mb-0">';
+  rows.forEach(row => {
+    if (row === null) {
+      html += '<tr><td colspan="2" class="p-0"><hr class="my-1 border-secondary"></td></tr>';
+      return;
+    }
+    const [k, v] = row;
+    const copyable = v && !v.startsWith('(');
+    const btn = copyable
+      ? `<button class="btn btn-sm btn-link p-0 ms-1 text-secondary copy-btn"
+                 data-val="${esc(v)}" title="Copy to clipboard">
+           <i class="bi bi-clipboard"></i>
+         </button>`
+      : '';
+    html += `<tr><th class="text-nowrap">${esc(k)}</th>
+                 <td class="font-monospace small text-break">${esc(v || '—')}${btn}</td></tr>`;
+  });
+  html += '</table>';
+
+  const $body = $('#cloudSQLOffcanvasBody').html(html);
+  $body.on('click', '.copy-btn', function () {
+    navigator.clipboard.writeText($(this).data('val'));
+    $(this).html('<i class="bi bi-check-lg text-success"></i>').attr('title', 'Copied!');
+    setTimeout(() => $(this).html('<i class="bi bi-clipboard"></i>').attr('title', 'Copy to clipboard'), 1500);
+  });
+}
+
+/* ── Create Cloud SQL tab ───────────────────────────────────────────── */
+function initTabCreateCloudSQL(envId) {
+  $('#btn-create-cloudsql').on('click', function () {
+    const engine = $('#cloudsql-engine').val();
+    doCreateCloudSQL(envId, engine, '');
+  });
+  $('#btn-cloudsql-info').on('click', function () {
+    const engine = $('#cloudsql-engine').val();
+    $.getJSON('/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
+      const endpoint = (d.flociPort ? `http://localhost:${d.flociPort}` : 'http://localhost:4589').replace('localhost', App.serverIP);
+      const projectId = d.accountId || 'floci-gcp-lab-1';
+      const slot = d.slot || 1;
+      const instanceId = `my${engine}-gcp${slot}-dsf`;
+      showCmdInfo(
+        (engine === 'postgres' ? 'PostgreSQL' : 'MySQL') + ' Cloud SQL Setup — curl commands',
+        getCmdStepsCloudSQL(engine, instanceId, endpoint, projectId)
+      );
+    });
+  });
+}
+
+function doCreateCloudSQL(envId, engine, instanceId) {
+  $('#btn-create-cloudsql').prop('disabled', true);
+  $.ajax({
+    url: `/api/gcp-envs/${encodeURIComponent(envId)}/cloudsql`,
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ engine, instanceId }),
+  })
+    .done(res => {
+      $('#btn-create-cloudsql').prop('disabled', false);
+      openJobModal(`Create Cloud SQL (${engine}) — ${res.instanceId}`, res.jobId,
+        () => loadGCPTab('cloudsql', envId));
+    })
+    .fail(xhr => {
+      $('#btn-create-cloudsql').prop('disabled', false);
+      if (xhr.status === 409) {
+        const data = JSON.parse(xhr.responseText);
+        showCloudSQLConfirm(envId, engine, data.existing || [], data.suggested || '');
+      } else {
+        showToast(apiError(xhr), 'danger');
+      }
+    });
+}
+
+function showCloudSQLConfirm(envId, engine, existing, suggested) {
+  const existingList = existing.map(id => `<li class="font-monospace small">${esc(id)}</li>`).join('');
+  $('#rdsConfirmBody').html(`
+    <p>A <strong>${esc(engine)}</strong> Cloud SQL instance already exists in this environment:</p>
+    <ul class="mb-3">${existingList}</ul>
+    <p class="mb-0 text-secondary small">
+      <strong>Overwrite</strong> re-runs setup on the existing instance (idempotent).<br>
+      <strong>Create New</strong> provisions a separate instance: <code>${esc(suggested)}</code>
+    </p>`);
+
+  const modal = new bootstrap.Modal(document.getElementById('rdsConfirmModal'));
+  modal.show();
+  $('#btn-rds-overwrite').off('click').on('click', () => {
+    modal.hide();
+    doCreateCloudSQL(envId, engine, existing[existing.length - 1]);
+  });
+  $('#btn-rds-create-new').off('click').on('click', () => {
+    modal.hide();
+    doCreateCloudSQL(envId, engine, suggested);
+  });
+}
+
+function getCmdStepsCloudSQL(engine, instanceId, endpoint, projectId) {
+  const topicName = instanceId + '-audit-topic';
+  const subName   = instanceId + '-dsf-sub';
+  const dbVersion = engine === 'postgres' ? 'POSTGRES_16' : 'MYSQL_8_0';
+
+  return [
+    {
+      title: 'Create Cloud SQL instance',
+      note:  'REST POST to the Cloud SQL Admin API. floci-gcp provisions a Docker container with the database.',
+      cmd:
+        `curl -s -X POST ${endpoint}/sql/v1beta4/projects/${projectId}/instances \\\n` +
+        `  -H 'Content-Type: application/json' \\\n` +
+        `  -d '{"name":"${instanceId}","databaseVersion":"${dbVersion}","region":"us-central1","rootPassword":"secret123"}'`,
+    },
+    {
+      title: 'Wait for RUNNABLE state',
+      note:  'Poll until the instance state transitions from PENDING to RUNNABLE.',
+      cmd:
+        `curl -s ${endpoint}/sql/v1beta4/projects/${projectId}/instances/${instanceId} \\\n` +
+        `  | grep -o '"state":"[^"]*"'`,
+    },
+    {
+      title: 'Create Pub/Sub topic',
+      note:  'DSF Agentless Gateway subscribes to this topic to receive audit log entries.',
+      cmd:
+        `curl -s -X PUT ${endpoint}/v1/projects/${projectId}/topics/${topicName} \\\n` +
+        `  -H 'Content-Type: application/json' -d '{}'`,
+    },
+    {
+      title: 'Create Pub/Sub subscription',
+      note:  'DSF uses pull-mode subscription to read batches of log entries.',
+      cmd:
+        `curl -s -X PUT ${endpoint}/v1/projects/${projectId}/subscriptions/${subName} \\\n` +
+        `  -H 'Content-Type: application/json' \\\n` +
+        `  -d '{"topic":"projects/${projectId}/topics/${topicName}","ackDeadlineSeconds":60}'`,
+    },
+    {
+      title: 'Create Cloud Logging sink → Pub/Sub',
+      note:  'The Log Router sink routes cloudsql_database audit logs to the Pub/Sub topic.',
+      cmd:
+        `curl -s -X POST ${endpoint}/v2/projects/${projectId}/sinks \\\n` +
+        `  -H 'Content-Type: application/json' \\\n` +
+        `  -d '{"name":"dsf-cloudsql-sink","destination":"pubsub.googleapis.com/projects/${projectId}/topics/${topicName}","filter":"resource.type=\\"cloudsql_database\\""}'`,
+    },
+    {
+      title: 'Create IAM service account + key',
+      note:  'DSF Gateway authenticates to Pub/Sub using a service account key file.',
+      cmd:
+        `curl -s -X POST ${endpoint}/v1/projects/${projectId}/serviceAccounts \\\n` +
+        `  -H 'Content-Type: application/json' \\\n` +
+        `  -d '{"accountId":"dsf-gateway","serviceAccount":{"displayName":"DSF Gateway"}}'\n\n` +
+        `curl -s -X POST ${endpoint}/v1/projects/${projectId}/serviceAccounts/dsf-gateway@${projectId}.iam.gserviceaccount.com/keys \\\n` +
+        `  -H 'Content-Type: application/json' -d '{"privateKeyType":"TYPE_GOOGLE_CREDENTIALS_FILE"}'`,
+    },
+  ];
+}
+
+/* ── GCP Data Generator tab ─────────────────────────────────────────── */
+function initTabGCPGenerator(envId) {
+  loadCloudSQLGenSection(envId);
+  App.gcpGenTimer = setInterval(() => refreshAllCloudSQLGenCards(envId), 3000);
+}
+
+function loadCloudSQLGenSection(envId) {
+  $.getJSON(`/api/gcp-envs/${encodeURIComponent(envId)}`).done(d => {
+    const $body = $('#cloudsql-gen-body').empty();
+    const instances = d.cloudSQL || [];
+    if (!instances.length) {
+      $body.html('<p class="text-secondary small">No Cloud SQL instances found. Create one in the Create Cloud SQL tab first.</p>');
+      return;
+    }
+    instances.forEach(inst => renderCloudSQLGenCard(envId, inst, $body));
+  });
+}
+
+function renderCloudSQLGenCard(envId, inst, $container) {
+  const $card = $(`
+    <div class="border rounded p-3 mb-3 cloudsql-gen-card" data-instance="${esc(inst.id)}">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="fw-bold small font-monospace">${esc(inst.id)}</span>
+        <span class="badge bg-warning text-dark">${esc(inst.engine)}</span>
+        <span class="badge bg-secondary cloudsql-gen-badge ms-auto">Stopped</span>
+      </div>
+      <p class="text-secondary small mb-2">
+        Generates continuous SQL traffic: INSERT/SELECT/UPDATE/DELETE + permission violations + login failures for DSF audit log testing.
+      </p>
+      <div class="d-flex gap-2 mb-2">
+        <button class="btn btn-success btn-sm btn-csql-start">
+          <i class="bi bi-play-fill me-1"></i>Start Generator
+        </button>
+        <button class="btn btn-danger btn-sm btn-csql-stop" disabled>
+          <i class="bi bi-stop-fill me-1"></i>Stop
+        </button>
+        <button class="btn btn-outline-secondary btn-sm ms-auto btn-csql-refresh">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+      </div>
+      <div class="cloudsql-gen-stats small text-muted mb-1 d-none"></div>
+      <pre class="job-output gen-log cloudsql-gen-log p-2 m-0 d-none" style="max-height:200px"></pre>
+    </div>`);
+
+  $card.find('.btn-csql-start').on('click', function () {
+    $(this).prop('disabled', true);
+    $.post(`/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/start`,
+      JSON.stringify({ instanceId: inst.id }), null, 'json')
+      .done(() => { showToast('Generator started for ' + inst.id, 'success'); refreshCloudSQLGenCard(envId, inst.id, $card); })
+      .fail(xhr => { $(this).prop('disabled', false); showToast(apiError(xhr), 'danger'); });
+  });
+  $card.find('.btn-csql-stop').on('click', function () {
+    $.post(`/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/stop`,
+      JSON.stringify({ instanceId: inst.id }), null, 'json')
+      .done(() => { showToast('Generator stopped', 'warning'); refreshCloudSQLGenCard(envId, inst.id, $card); })
+      .fail(xhr => showToast(apiError(xhr), 'danger'));
+  });
+  $card.find('.btn-csql-refresh').on('click', () => refreshCloudSQLGenCard(envId, inst.id, $card));
+
+  $container.append($card);
+  refreshCloudSQLGenCard(envId, inst.id, $card);
+}
+
+function refreshCloudSQLGenCard(envId, instanceId, $card) {
+  $.getJSON(`/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/logs?instance=${encodeURIComponent(instanceId)}`)
+    .done(res => {
+      const $badge = $card.find('.cloudsql-gen-badge');
+      const $log   = $card.find('.cloudsql-gen-log');
+      const $stats = $card.find('.cloudsql-gen-stats');
+      const $start = $card.find('.btn-csql-start');
+      const $stop  = $card.find('.btn-csql-stop');
+
+      if (res.running) {
+        $badge.text('Running').removeClass('bg-secondary').addClass('bg-success');
+        $start.prop('disabled', true);
+        $stop.prop('disabled', false);
+      } else {
+        $badge.text('Stopped').removeClass('bg-success').addClass('bg-secondary');
+        $start.prop('disabled', false);
+        $stop.prop('disabled', true);
+      }
+      if (res.lines && res.lines.length) {
+        $log.removeClass('d-none').text(res.lines.join('\n'));
+        $log[0].scrollTop = $log[0].scrollHeight;
+      }
+      if (res.stats && res.stats.total > 0) {
+        const s = res.stats;
+        $stats.removeClass('d-none').html(
+          `total: <b>${s.total}</b> &nbsp;|&nbsp; ` +
+          `<span class="text-success">ok: ${s.success}</span> &nbsp;` +
+          `<span class="text-danger">err: ${s.errors}</span> &nbsp;|&nbsp; ` +
+          `ins: ${s.inserts} sel: ${s.selects} upd: ${s.updates} del: ${s.deletes} &nbsp;|&nbsp; ` +
+          `<span class="text-warning">perm_denied: ${s.permDenied}</span> ` +
+          `grants: ${s.grants} revokes: ${s.revokes} &nbsp;|&nbsp; ` +
+          `login_fail: ${s.loginFails} sql_err: ${s.sqlErrors}`
+        );
+      }
+    });
+}
+
+function refreshAllCloudSQLGenCards(envId) {
+  $('.cloudsql-gen-card').each(function () {
+    const instanceId = $(this).data('instance');
+    if (instanceId) refreshCloudSQLGenCard(envId, instanceId, $(this));
+  });
 }
 
 /* ── Env Detail page ────────────────────────────────────────────────── */
@@ -1105,6 +1543,10 @@ function getCmdStepsFAM(suffix, endpoint) {
 /* ── Utilities ──────────────────────────────────────────────────────── */
 function labelForEnv(env) {
   if (env.id === 'floci-local-aws') return 'Default Env';
+  if (env.cloud === 'gcp' || (env.id && env.id.startsWith('floci-gcp'))) {
+    const slot = env.slot || env.id.replace('floci-gcp', '');
+    return 'GCP Env ' + slot;
+  }
   return 'Env ' + (env.slot || env.id.replace('floci-env', ''));
 }
 

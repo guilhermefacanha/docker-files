@@ -17,9 +17,10 @@ import (
 // Config holds the paths the manager needs. All are real host-side paths since
 // the binary runs natively — no container/host translation required.
 type Config struct {
-	Workspace  string // e.g. ./workspace  (env copies live here as workspace/env1, env2, ...)
-	ScriptsDir string // e.g. ./scripts    (bundled floci template, read-only)
-	MaxSlots   int    // 5
+	Workspace     string // e.g. ./workspace  (env copies live here as workspace/env1, env2, ...)
+	ScriptsDir    string // e.g. ./scripts    (bundled AWS floci template, read-only)
+	GCPScriptsDir string // e.g. ./scripts/gcp (bundled GCP floci template, read-only)
+	MaxSlots      int    // 5
 }
 
 type Detail struct {
