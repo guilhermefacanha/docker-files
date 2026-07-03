@@ -1,0 +1,40 @@
+services:
+  floci-az:
+    image: guilhermefacanha/floci:azure
+    ports:
+      - "${FLOCI_AZ_PORT:-6001}:4577"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+    environment:
+      FLOCI_AZ_TLS_ENABLED: "false"
+      FLOCI_AZ_SERVICES_DOCKER_NETWORK: "${FLOCI_AZ_NETWORK:-floci-az1_default}"
+      FLOCI_AZ_SERVICES_EVENT_HUB_MOCKED: "false"
+      FLOCI_AZ_SERVICES_EVENT_HUB_ENABLED: "true"
+    restart: always
+
+  az-log-shipper:
+    build:
+      context: .
+      dockerfile: Dockerfile.az-log-shipper
+    depends_on:
+      - floci-az
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      FLOCI_AZ_ENDPOINT: "http://floci-az:4577"
+      AZ_SUBSCRIPTION_ID: "${AZ_SUBSCRIPTION_ID:-00000000-0000-0000-0000-000000000001}"
+      AZ_RESOURCE_GROUP: "${AZ_RESOURCE_GROUP:-dsf-lab-rg}"
+      AZ_EVENTHUB_NAMESPACE: "${AZ_EVENTHUB_NAMESPACE:-dsf-eventhub-az1}"
+      AZ_EVENTHUB_NAME: "${AZ_EVENTHUB_NAME:-dsf-audit-logs}"
+      AZ_EVENTHUB_ACCOUNT_PREFIX: "dsf-lab"
+      ARTEMIS_HOST: "floci-az-artemis-${AZ_EVENTHUB_NAMESPACE:-dsf-eventhub-az1}"
+      ARTEMIS_PORT: "5672"
+      POLL_INTERVAL: "10"
+      FLUSH_INTERVAL: "2"
+      BATCH_SIZE: "100"
+    restart: always
+
+networks:
+  default:
+    name: "${FLOCI_AZ_NETWORK:-floci-az1_default}"

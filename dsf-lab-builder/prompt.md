@@ -1,6 +1,5 @@
-read onboarding_databases_to_dsf_hub_reference_guide_google_cloud_(gcp)_data_sources_2026-06-25-16-04-53.pdf                                                                                                                                                                                                     
-and read documentation for https://floci.io/gcp/#services                                                                                                                                                                                                                                                        
-what services can we also expand our coverage for emulating gcp?                                                                                                                                                                                                                                                 
-Do we have everything we need already or we would have to colaborate to the opensource project to support the required services for DSF?
+in my data generator for azure only the first one has logs being auto load
 
-Do the same for azure https://floci.io/az/#services onboarding_databases_to_dsf_hub_reference_guide_azure_data_sources_2026-06-25-16-07-21.pdf 
+![img.png](img.png)
+
+the 2 below are frozen but when i refresh the page it loads new content

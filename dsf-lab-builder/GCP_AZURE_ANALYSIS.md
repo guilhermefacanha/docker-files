@@ -1,6 +1,6 @@
 # GCP & Azure DSF Lab Coverage Analysis
 
-**Date:** 2026-06-26  
+**Date:** 2026-07-03 (updated — MySQL/MariaDB/PostgreSQL ARM stubs contributed to floci-az)  
 **Source docs:**  
 - Thales DSF Hub Reference Guide — Google Cloud (GCP) Data Sources (Jun 25, 2026)  
 - Thales DSF Hub Reference Guide — Azure Data Sources (Jun 25, 2026)  
@@ -136,6 +136,9 @@ The gaps are at the **database emulator level** — BigQuery, Bigtable, and Span
 | **Cosmos DB** | SQL, Mongo, Cassandra, Gremlin | ✅ Covers 3 of 4 Cosmos DB APIs |
 | AKS | REST JSON, k3s/mocked | — |
 | **Azure SQL** | ARM + SQL Server via Docker | ✅ Partial — covers Azure SQL Server |
+| **Azure Database for PostgreSQL** | ARM + Docker (Flexible Server model) | ✅ Covers PostgreSQL DSF data sources |
+| **Azure Database for MySQL** | ARM + Docker (Flexible Server model) | ✅ Covers MySQL (Single + Flexible) DSF data sources |
+| **Azure Database for MariaDB** | ARM + Docker (Single Server model) | ✅ Covers MariaDB DSF data source |
 | API Management | ARM, REST JSON | — |
 | Virtual Machines | ARM, REST JSON | — |
 | Cache for Redis | ARM + Redis via Docker | — |
@@ -163,17 +166,17 @@ Database → Diagnostic Settings → Azure Monitor (floci) → Event Hubs (floci
 - **Event Hubs** ✅ — **The most critical piece.** All 15 Azure data sources use Event Hubs as the log aggregator. AMQP protocol is supported, which is exactly what DSF uses.  
 - **Blob Storage** ✅ — Required for Event Hub checkpoint metadata storage  
 - **Microsoft Entra ID** ✅ — Managed Identity and Client Secret auth both supported  
-- **Azure Monitor** ✅ — Diagnostic settings configuration  
+- **Azure Monitor / Diagnostic Settings** ✅ — Extension resource API (`{resourceUri}/providers/microsoft.insights/diagnosticSettings`) implemented for all managed databases  
 - **Cosmos DB** ✅ — SQL/Core, MongoDB, Cassandra, Gremlin APIs (covers 3 of 4 Cosmos DB DSF sources); Table API via Table Storage  
 - **Azure SQL** ✅ — Basic SQL Server coverage via Docker  
+- **Azure Database for MySQL** ✅ — Flexible Server ARM API stub + MySQL Docker container (contributed 2026-07-03)  
+- **Azure Database for MariaDB** ✅ — Single Server ARM API stub + MariaDB Docker container (contributed 2026-07-03)  
+- **Azure Database for PostgreSQL** ✅ — Flexible Server ARM API stub + PostgreSQL Docker container  
 
 #### What is MISSING from floci-az
 
 | Missing Service | Impact | Notes |
 |---|---|---|
-| **Azure Database for MySQL** (Single + Flexible) | ❌ No managed MySQL emulator | MySQL Docker container exists but no Azure ARM management plane to configure diagnostic settings |
-| **Azure Database for MariaDB** | ❌ No managed MariaDB emulator | Same as MySQL — needs ARM API stub + Docker container |
-| **Azure Database for PostgreSQL** (Single + Flexible) | ❌ No managed PostgreSQL emulator | Same pattern — needs ARM API stub + Docker container |
 | **Azure Databricks** | ❌ No Databricks emulator | Very complex proprietary service; no viable open-source alternative |
 | **Azure Data Explorer** (Kusto) | ❌ No Kusto emulator | Proprietary query engine; no viable open-source alternative |
 | **Azure Data Lake Storage Gen2** | ⚠️ Partial | Gen2 adds hierarchical namespace on top of Blob Storage. Could be implemented as an extension to existing Blob Storage in floci. |
@@ -183,9 +186,9 @@ Database → Diagnostic Settings → Azure Monitor (floci) → Event Hubs (floci
 
 ### Azure Verdict
 
-**The log pipeline is entirely ready.** Event Hubs (with AMQP), Blob Storage (metadata), Microsoft Entra ID (auth), and Azure Monitor (diagnostic settings) are all supported by floci-az. This means any database that can send diagnostic logs to an Event Hub endpoint will work.
+**The log pipeline and all three open-source database services are now fully covered.** Event Hubs (AMQP), Blob Storage (metadata), Microsoft Entra ID (auth), Azure Monitor / Diagnostic Settings, MySQL, MariaDB, and PostgreSQL ARM stubs are all present in floci-az.
 
-The gaps are at the **managed database service level**. For MySQL, MariaDB, and PostgreSQL, the actual database can run as a Docker container — the missing piece is the ARM management API stub that simulates Azure's diagnostic settings UI/API (the step that routes logs to Event Hubs). This is a **lower-complexity contribution** to floci-az compared to proprietary services like Databricks or Data Explorer.
+The remaining gaps are proprietary managed services (Databricks, Data Explorer, Synapse) for which no viable open-source emulator exists.
 
 ---
 
@@ -211,9 +214,9 @@ The gaps are at the **managed database service level**. For MySQL, MariaDB, and 
 | Azure Blob Storage lab | ✅ Ready today | floci Blob Storage + Event Hubs available |
 | Cosmos DB (MongoDB/NoSQL/Gremlin) lab | ✅ Ready today | floci Cosmos DB covers these APIs |
 | Cosmos DB Table lab | ⚠️ Needs testing | floci Table Storage exists; verify log format compatibility |
-| Azure Database for MySQL lab | ⚠️ Partial | Database Docker container available; ARM diagnostic API stub needed in floci-az |
-| Azure Database for MariaDB lab | ⚠️ Partial | Same as MySQL above |
-| Azure Database for PostgreSQL lab | ⚠️ Partial | Same as MySQL above |
+| Azure Database for MySQL lab | ✅ Ready today | ARM stub + Docker container contributed to floci-az (2026-07-03) |
+| Azure Database for MariaDB lab | ✅ Ready today | ARM stub + Docker container contributed to floci-az (2026-07-03) |
+| Azure Database for PostgreSQL lab | ✅ Ready today | ARM stub + Docker container available in floci-az |
 | Azure SQL Server lab | ✅ Ready today | floci Azure SQL covers SQL Server via Docker |
 | Azure SQL Managed Instance lab | ⚠️ Partial | floci Azure SQL covers wire protocol; Managed Instance ARM API incomplete |
 | Azure Databricks lab | ❌ Blocked | No viable emulator; requires OSS contribution or skip |
@@ -228,7 +231,7 @@ The gaps are at the **managed database service level**. For MySQL, MariaDB, and 
 ### High Priority (enables the most DSF coverage)
 
 1. **floci-gcp: BigQuery emulator** — Integrate `ghcr.io/goccy/bigquery-emulator`. BigQuery is one of GCP's most common DSF data sources.
-2. **floci-az: Azure Database for MySQL/MariaDB/PostgreSQL** — Add ARM management API stubs + Docker containers. These 5 data sources share the same architecture and a single implementation pattern covers all of them.
+2. ~~**floci-az: Azure Database for MySQL/MariaDB/PostgreSQL**~~ ✅ **DONE (2026-07-03)** — ARM management API stubs + Docker containers contributed for all three databases. Diagnostic settings extension resource implemented cross-cuttingly in MonitorHandler.
 3. **floci-az: Azure Data Lake Storage Gen2** — Extend the existing Blob Storage service with hierarchical namespace support.
 
 ### Medium Priority

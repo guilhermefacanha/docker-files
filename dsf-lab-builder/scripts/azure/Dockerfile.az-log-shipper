@@ -1,0 +1,14 @@
+FROM python:3.12-slim AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ cmake libssl-dev libsasl2-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --prefix=/install python-qpid-proton requests docker
+
+FROM python:3.12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 libsasl2-2 docker.io \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /install /usr/local
+WORKDIR /app
+COPY az-log-shipper.py .
+CMD ["python", "-u", "az-log-shipper.py"]

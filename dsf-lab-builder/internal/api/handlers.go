@@ -63,6 +63,22 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/gcp-envs/{id}/generator/cloudsql/stop", h.stopCloudSQLGenerator)
 	mux.HandleFunc("GET /api/gcp-envs/{id}/generator/cloudsql/logs", h.getCloudSQLGeneratorLogs)
 
+	// Azure env lifecycle
+	mux.HandleFunc("POST /api/az-envs", h.deployAZEnv)
+	mux.HandleFunc("GET /api/az-envs/{id}", h.getAZEnv)
+	mux.HandleFunc("DELETE /api/az-envs/{id}", h.deleteAZEnv)
+
+	// Azure databases
+	mux.HandleFunc("GET /api/az-envs/{id}/azdb/suggest", h.suggestAZDatabase)  // ?engine=X
+	mux.HandleFunc("GET /api/az-envs/{id}/azdb/detail", h.getAZDatabaseDetail) // ?instance=X&engine=Y
+	mux.HandleFunc("POST /api/az-envs/{id}/azdb", h.createAZDatabase)
+	mux.HandleFunc("POST /api/az-envs/{id}/test/azdb/{engine}", h.testAZDatabase)
+
+	// Azure background generator
+	mux.HandleFunc("POST /api/az-envs/{id}/generator/azdb/start", h.startAZGenerator)
+	mux.HandleFunc("POST /api/az-envs/{id}/generator/azdb/stop", h.stopAZGenerator)
+	mux.HandleFunc("GET /api/az-envs/{id}/generator/azdb/logs", h.getAZGeneratorLogs)
+
 	// Job streaming
 	mux.HandleFunc("GET /api/jobs/{id}", h.getJob)
 	mux.HandleFunc("GET /api/jobs/{id}/stream", h.streamJob)
@@ -651,6 +667,19 @@ func findGCPEnv(id string) (docker.EnvSummary, error) {
 	return docker.EnvSummary{}, fmt.Errorf("GCP env not found: %s", id)
 }
 
+func findAZEnv(id string) (docker.EnvSummary, error) {
+	envs, err := docker.ListEnvs()
+	if err != nil {
+		return docker.EnvSummary{}, err
+	}
+	for _, e := range envs {
+		if e.ID == id && e.Cloud == "azure" {
+			return e, nil
+		}
+	}
+	return docker.EnvSummary{}, fmt.Errorf("Azure env not found: %s", id)
+}
+
 func slotFromID(id string) int {
 	if !strings.HasPrefix(id, "floci-env") {
 		return 0
@@ -663,4 +692,187 @@ func slotFromID(id string) int {
 		n = n*10 + int(c-'0')
 	}
 	return n
+}
+
+// ── Azure env lifecycle ───────────────────────────────────────────────────────
+
+func (h *Handler) deployAZEnv(w http.ResponseWriter, r *http.Request) {
+	slot, err := env.DetectNextAZSlot(h.Cfg)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	job := env.DeployAZ(slot, h.Cfg)
+	writeJSON(w, map[string]string{"jobId": job.ID})
+}
+
+func (h *Handler) getAZEnv(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	e, err := findAZEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	detail, err := env.GetAZDetail(e, h.Cfg)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, detail)
+}
+
+func (h *Handler) deleteAZEnv(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	slot := docker.AzSlotFromID(id)
+	if slot == 0 {
+		writeError(w, 400, "invalid Azure env ID: "+id)
+		return
+	}
+	job := env.DestroyAZ(slot, h.Cfg)
+	writeJSON(w, map[string]string{"jobId": job.ID})
+}
+
+// ── Azure databases ───────────────────────────────────────────────────────────
+
+func (h *Handler) suggestAZDatabase(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	engine := r.URL.Query().Get("engine")
+	if engine == "" {
+		engine = "mysql"
+	}
+	e, err := findAZEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	existing, suggested, err := env.SuggestNextAZDatabase(e, engine)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]interface{}{"existing": existing, "suggested": suggested})
+}
+
+func (h *Handler) getAZDatabaseDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	instance := r.URL.Query().Get("instance")
+	engine := r.URL.Query().Get("engine")
+	if instance == "" || engine == "" {
+		writeError(w, 400, "instance and engine query params required")
+		return
+	}
+	e, err := findAZEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	detail, err := env.GetAZDatabaseDetail(e, instance, engine, h.Cfg)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	writeJSON(w, detail)
+}
+
+func (h *Handler) createAZDatabase(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		Engine     string `json:"engine"`
+		InstanceID string `json:"instanceId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Engine == "" || body.InstanceID == "" {
+		writeError(w, 400, "engine and instanceId required")
+		return
+	}
+	e, err := findAZEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	job, err := env.CreateAZDatabase(e, body.Engine, body.InstanceID, h.Cfg)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"jobId": job.ID})
+}
+
+func (h *Handler) testAZDatabase(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	engine := r.PathValue("engine")
+	var body struct {
+		InstanceID string `json:"instanceId"`
+	}
+	json.NewDecoder(r.Body).Decode(&body) //nolint:errcheck
+	e, err := findAZEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	job, err := env.TestAZDatabase(e, engine, body.InstanceID, h.Cfg)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"jobId": job.ID})
+}
+
+// ── Azure generator ───────────────────────────────────────────────────────────
+
+func (h *Handler) startAZGenerator(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		InstanceID string `json:"instanceId"`
+		Engine     string `json:"engine"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.InstanceID == "" || body.Engine == "" {
+		writeError(w, 400, "instanceId and engine required")
+		return
+	}
+	e, err := findAZEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	detail, err := env.GetAZDatabaseDetail(e, body.InstanceID, body.Engine, h.Cfg)
+	if err != nil {
+		writeError(w, 404, "database not found: "+err.Error())
+		return
+	}
+	if detail.ProxyPort == 0 {
+		writeError(w, 400, "no host proxy running for this database — run setup script first")
+		return
+	}
+	key := env.AZGenKey(id, body.InstanceID)
+	if err := env.StartAZGen(id, body.InstanceID, body.Engine, detail.ProxyPort, h.Cfg); err != nil {
+		writeError(w, 409, err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"ok": "true", "key": key})
+}
+
+func (h *Handler) stopAZGenerator(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		InstanceID string `json:"instanceId"`
+	}
+	json.NewDecoder(r.Body).Decode(&body) //nolint:errcheck
+	key := env.AZGenKey(id, body.InstanceID)
+	if err := env.StopAZGen(key); err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"ok": "true"})
+}
+
+func (h *Handler) getAZGeneratorLogs(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	instanceID := r.URL.Query().Get("instance")
+	key := env.AZGenKey(id, instanceID)
+	lines, running, stats := env.GetAZGenStatus(key, 100)
+	writeJSON(w, map[string]interface{}{
+		"lines":   lines,
+		"running": running,
+		"stats":   stats,
+	})
 }

@@ -37,6 +37,9 @@ function navigate(hash) {
   } else if (hash.startsWith('#/gcp-env/')) {
     App.currentEnvId = decodeURIComponent(hash.slice(10));
     showGCPEnvDetail(App.currentEnvId);
+  } else if (hash.startsWith('#/az-env/')) {
+    App.currentEnvId = decodeURIComponent(hash.slice(9));
+    showAZEnvDetail(App.currentEnvId);
   } else {
     showHome();
   }
@@ -45,8 +48,11 @@ function navigate(hash) {
 function clearTimers() {
   clearInterval(App.refreshTimer);
   clearInterval(App.genRefreshTimer);
+  clearInterval(App.azGenTimer);
   App.refreshTimer = null;
   App.genRefreshTimer = null;
+  App.azGenTimer = null;
+  App.azPollFns = [];
 }
 
 /* ── Home page ──────────────────────────────────────────────────────── */
@@ -56,6 +62,7 @@ function showHome() {
   $('#main-content').empty().append(tpl);
   $('#btn-deploy').on('click', deployNewEnv);
   $('#btn-deploy-gcp').on('click', deployNewGCPEnv);
+  $('#btn-deploy-az').on('click', deployNewAZEnv);
   loadEnvs();
   App.refreshTimer = setInterval(loadEnvs, 5000);
 }
@@ -79,13 +86,16 @@ function renderEnvGrid(envs) {
     return;
   }
   envs.forEach(env => {
-    const isGCP = env.cloud === 'gcp';
+    const isGCP   = env.cloud === 'gcp';
+    const isAzure = env.cloud === 'azure';
     const tpl = document.getElementById('tpl-env-card').content.cloneNode(true);
     const $card = $(tpl).find('.card');
     $card.attr('data-env-id', env.id);
     const cloudBadge = isGCP
       ? '<span class="badge bg-warning text-dark me-1" style="font-size:.65em"><i class="bi bi-google"></i> GCP</span>'
-      : '<span class="badge bg-info text-dark me-1" style="font-size:.65em">AWS</span>';
+      : isAzure
+        ? '<span class="badge bg-info text-dark me-1" style="font-size:.65em"><i class="bi bi-microsoft"></i> Azure</span>'
+        : '<span class="badge bg-info text-dark me-1" style="font-size:.65em">AWS</span>';
     $card.find('.env-name').html(cloudBadge + esc(labelForEnv(env)));
     $card.find('.env-port').text(env.flociPort || '—');
     $card.find('.env-account').text(env.accountId || '—');
@@ -94,11 +104,15 @@ function renderEnvGrid(envs) {
     $badge.text(env.status).addClass(statusBadgeClass(env.status));
     const envHash = isGCP
       ? '#/gcp-env/' + encodeURIComponent(env.id)
-      : '#/env/' + encodeURIComponent(env.id);
+      : isAzure
+        ? '#/az-env/' + encodeURIComponent(env.id)
+        : '#/env/' + encodeURIComponent(env.id);
     $card.find('.btn-open').on('click', () => { window.location.hash = envHash; });
     $card.find('.btn-destroy').on('click', e => {
       e.stopPropagation();
-      if (isGCP) destroyGCPEnv(env); else destroyEnv(env);
+      if (isGCP) destroyGCPEnv(env);
+      else if (isAzure) destroyAZEnv(env);
+      else destroyEnv(env);
     });
     $card.on('click', function (e) {
       if (!$(e.target).is('button, a')) window.location.hash = envHash;
@@ -1574,6 +1588,302 @@ function esc(s) {
 function apiError(xhr) {
   try { return JSON.parse(xhr.responseText).error || xhr.statusText; }
   catch { return xhr.statusText || 'Unknown error'; }
+}
+
+/* ── Azure env lifecycle ─────────────────────────────────────────────── */
+function deployNewAZEnv() {
+  if (!confirm('Deploy a new Azure environment?\nThis will start floci-az and az-log-shipper containers.')) return;
+  const $btn = $('#btn-deploy-az').prop('disabled', true)
+    .html('<span class="spinner-border spinner-border-sm me-1"></span>Deploying…');
+  $.post('/api/az-envs')
+    .done(res => {
+      $btn.prop('disabled', false).html('<i class="bi bi-microsoft me-1"></i>Deploy Azure Env');
+      openJobModal('Deploying New Azure Environment', res.jobId, () => loadEnvs());
+    })
+    .fail(xhr => {
+      $btn.prop('disabled', false).html('<i class="bi bi-microsoft me-1"></i>Deploy Azure Env');
+      showToast('Azure Deploy failed: ' + apiError(xhr), 'danger');
+    });
+}
+
+function destroyAZEnv(env) {
+  if (!confirm(`Destroy Azure environment ${env.id}?\nThis will stop all containers and delete all data.`)) return;
+  $.ajax({ url: '/api/az-envs/' + encodeURIComponent(env.id), method: 'DELETE' })
+    .done(res => openJobModal('Destroying ' + env.id, res.jobId, () => loadEnvs()))
+    .fail(xhr => showToast('Destroy failed: ' + apiError(xhr), 'danger'));
+}
+
+/* ── Azure env detail page ───────────────────────────────────────────── */
+function showAZEnvDetail(envId) {
+  const tpl = document.getElementById('tpl-az-env-detail').content.cloneNode(true);
+  $('#main-content').empty().append(tpl);
+  setBreadcrumb(envId);
+
+  $('#main-content').on('click', 'a[href="#"]', e => {
+    if ($(e.target).closest('#az-detail-tabs').length) return;
+    e.preventDefault();
+    window.location.hash = '#/';
+  });
+
+  $('#az-detail-tabs').on('click', 'a.nav-link', function (e) {
+    e.preventDefault();
+    $('#az-detail-tabs a.nav-link').removeClass('active');
+    $(this).addClass('active');
+    loadAZTab($(this).data('azTab'), envId);
+  });
+
+  loadAZEnvHeader(envId);
+  loadAZTab('azdb', envId);
+  App.refreshTimer = setInterval(() => {
+    if ($('[data-az-tab="azdb"]').hasClass('active') || !$('#az-detail-tabs .nav-link.active').length) {
+      refreshAZDatabases(envId);
+    }
+  }, 8000);
+}
+
+function loadAZEnvHeader(envId) {
+  $.getJSON('/api/az-envs/' + encodeURIComponent(envId)).done(d => {
+    $('#az-detail-title').text(labelForEnv(d));
+    $('#az-detail-status').text(d.status).removeClass().addClass('badge ' + statusBadgeClass(d.status));
+    $('#az-detail-port').text(d.flociPort || '—');
+    $('#az-detail-sub').text((d.accountId || '—').slice(-8));
+    $('#az-detail-network').text(d.network || '—');
+  });
+}
+
+function loadAZTab(tab, envId) {
+  const $content = $('#az-detail-tab-content');
+  const tplId = tab === 'azdb'          ? 'tpl-tab-azdb'
+              : tab === 'create-azdb'   ? 'tpl-tab-create-azdb'
+              : 'tpl-tab-az-generator';
+  $content.empty().append(document.getElementById(tplId).content.cloneNode(true));
+
+  if (App.azGenTimer) { clearInterval(App.azGenTimer); App.azGenTimer = null; }
+
+  switch (tab) {
+    case 'azdb':          initTabAZDB(envId); break;
+    case 'create-azdb':   initTabCreateAZDB(envId); break;
+    case 'az-generator':  initTabAZGenerator(envId); break;
+  }
+}
+
+/* ── Azure databases tab ─────────────────────────────────────────────── */
+function initTabAZDB(envId) {
+  refreshAZDatabases(envId);
+  $('#btn-refresh-az-detail').on('click', () => refreshAZDatabases(envId));
+}
+
+function refreshAZDatabases(envId) {
+  $.getJSON('/api/az-envs/' + encodeURIComponent(envId)).done(d => {
+    renderAZDBTable(d.databases || [], envId);
+  });
+}
+
+function renderAZDBTable(rows, envId) {
+  const $tbody = $('#azdb-tbody').empty();
+  if (!rows.length) {
+    $tbody.append('<tr><td colspan="5" class="text-center text-secondary p-3">No Azure databases — create one in the Create Database tab</td></tr>');
+    return;
+  }
+  rows.forEach(db => {
+    const $tr = $(`<tr>
+      <td class="font-monospace small">${esc(db.id)}</td>
+      <td><span class="badge bg-secondary">${esc(db.engine)}</span></td>
+      <td><span class="badge ${db.status === 'Ready' ? 'bg-success' : 'bg-warning text-dark'}">${esc(db.status)}</span></td>
+      <td class="font-monospace small text-secondary">${esc(db.endpoint || '—')}</td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-outline-info btn-azdb-info me-1"
+                data-instance="${esc(db.id)}" data-engine="${esc(db.engine)}"
+                title="Show full database info: Event Hub, diagnostic settings, credentials">
+          <i class="bi bi-info-circle"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-secondary btn-test-azdb"
+                data-instance="${esc(db.id)}" data-engine="${esc(db.engine)}"
+                title="Generate SQL traffic and verify Event Hub receives audit logs">
+          <i class="bi bi-play"></i>
+        </button>
+      </td>
+    </tr>`);
+    $tbody.append($tr);
+  });
+  $tbody.find('.btn-azdb-info').on('click', function () {
+    showAZDBDetail(envId, $(this).data('instance'), $(this).data('engine'));
+  });
+  $tbody.find('.btn-test-azdb').on('click', function () {
+    const inst = $(this).data('instance');
+    const eng  = $(this).data('engine');
+    $.post(`/api/az-envs/${encodeURIComponent(envId)}/test/azdb/${eng}`,
+           JSON.stringify({ instanceId: inst }),
+           null, 'json')
+      .done(res => openJobModal(`Test Azure ${eng} — ${inst}`, res.jobId))
+      .fail(xhr => showToast('Test failed: ' + apiError(xhr), 'danger'));
+  });
+}
+
+function showAZDBDetail(envId, instanceId, engine) {
+  document.getElementById('azDBOffcanvasTitle').textContent = instanceId + ' (' + engine + ')';
+  document.getElementById('azDBOffcanvasBody').innerHTML =
+    '<div class="d-flex justify-content-center align-items-center p-5"><div class="spinner-border spinner-border-sm text-info"></div></div>';
+  const oc = new bootstrap.Offcanvas(document.getElementById('azDBOffcanvas'));
+  oc.show();
+  $.getJSON(`/api/az-envs/${encodeURIComponent(envId)}/azdb/detail?instance=${encodeURIComponent(instanceId)}&engine=${encodeURIComponent(engine)}`)
+    .done(d => renderAZDBDetailPanel(d))
+    .fail(() => {
+      document.getElementById('azDBOffcanvasBody').innerHTML =
+        '<div class="p-4 text-danger">Failed to load database details.</div>';
+    });
+}
+
+function renderAZDBDetailPanel(d) {
+  const ip = App.serverIP || 'localhost';
+  const proxyEndpoint = d.proxyPort ? `${ip}:${d.proxyPort}` : '(proxy not running — run setup script first)';
+
+  let html = `<div class="p-3 border-bottom border-secondary-subtle">
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span class="badge bg-info text-dark"><i class="bi bi-microsoft me-1"></i>Azure</span>
+      <span class="badge bg-secondary">${esc(d.engine)}</span>
+      <span class="badge ${d.status === 'Ready' ? 'bg-success' : 'bg-warning text-dark'}">${esc(d.status)}</span>
+    </div>
+    <div class="font-monospace small text-secondary">${esc(d.id)}</div>
+  </div>`;
+
+  html += '<table class="table table-sm fam-info-table mb-0">';
+  const rows = [
+    ['Engine',           d.engine + ' ' + (d.engineVersion || '')],
+    ['Status',           d.status],
+    ['FQDN',             d.endpoint || '—'],
+    ['Host Proxy',       proxyEndpoint],
+    ['Master User',      d.masterUser],
+    ['Master Pass',      d.masterPass],
+    ['Audit User',       d.auditUser],
+    ['Audit Pass',       d.auditPass],
+    ['Subscription',     d.subscriptionId],
+    ['Resource Group',   d.resourceGroup],
+    ['Event Hub NS',     d.eventHubNamespace],
+    ['Event Hub',        d.eventHubName],
+    ['Diag Setting',     d.diagnosticSettingName],
+    ['Floci-AZ URL',     d.flociEndpoint],
+  ];
+  rows.forEach(([k, v]) => {
+    html += `<tr><td class="text-secondary small" style="width:140px">${esc(k)}</td>
+                 <td class="font-monospace small">${esc(String(v || '—'))}</td></tr>`;
+  });
+
+  // Connection strings
+  const jdbcBase = d.proxyPort ? `localhost:${d.proxyPort}` : (d.host || 'localhost');
+  let connStr = '';
+  if (d.engine === 'postgres') {
+    connStr = `jdbc:postgresql://${jdbcBase}/postgres?user=${d.masterUser}&password=${d.masterPass}&sslmode=disable`;
+  } else {
+    connStr = `jdbc:${d.engine}://${jdbcBase}/dsf_lab?user=${d.masterUser}&password=${d.masterPass}&useSSL=false&allowPublicKeyRetrieval=true`;
+  }
+  html += `<tr><td class="text-secondary small">JDBC (proxy)</td>
+               <td class="font-monospace small" style="word-break:break-all">${esc(connStr)}</td></tr>`;
+
+  html += '</table>';
+  document.getElementById('azDBOffcanvasBody').innerHTML = html;
+}
+
+/* ── Create Azure database tab ───────────────────────────────────────── */
+function initTabCreateAZDB(envId) {
+  loadAZDBSuggest(envId);
+  $('#azdb-engine').on('change', () => loadAZDBSuggest(envId));
+  $('#btn-create-azdb').on('click', () => {
+    const engine = $('#azdb-engine').val();
+    const instanceId = $('#azdb-suggest-label').data('suggested') || '';
+    if (!instanceId) { showToast('No suggested name available', 'warning'); return; }
+    $.post(`/api/az-envs/${encodeURIComponent(envId)}/azdb`,
+           JSON.stringify({ engine, instanceId }),
+           null, 'json')
+      .done(res => openJobModal(`Create Azure ${engine} — ${instanceId}`, res.jobId, () => {
+        window.location.hash = '#/az-env/' + encodeURIComponent(envId);
+      }))
+      .fail(xhr => showToast('Create failed: ' + apiError(xhr), 'danger'));
+  });
+}
+
+function loadAZDBSuggest(envId) {
+  const engine = $('#azdb-engine').val();
+  $.getJSON(`/api/az-envs/${encodeURIComponent(envId)}/azdb/suggest?engine=${engine}`)
+    .done(d => {
+      $('#azdb-suggest-label').text('→ ' + (d.suggested || '')).data('suggested', d.suggested);
+    });
+}
+
+/* ── Azure generator tab ─────────────────────────────────────────────── */
+function initTabAZGenerator(envId) {
+  $.getJSON('/api/az-envs/' + encodeURIComponent(envId)).done(d => {
+    const $body = $('#az-gen-body').empty();
+    const dbs = d.databases || [];
+    if (!dbs.length) {
+      $body.html('<p class="text-secondary small">No Azure databases — create one first.</p>');
+      return;
+    }
+    dbs.forEach(db => {
+      const key = `az:${envId}:${db.id}`;
+      const $card = $(`<div class="mb-3 p-3 border border-secondary-subtle rounded">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-semibold">${esc(db.id)} <span class="badge bg-secondary ms-1">${esc(db.engine)}</span></span>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-success btn-start-az-gen" data-instance="${esc(db.id)}" data-engine="${esc(db.engine)}">
+              <i class="bi bi-play-fill me-1"></i>Start
+            </button>
+            <button class="btn btn-sm btn-danger btn-stop-az-gen" data-instance="${esc(db.id)}">
+              <i class="bi bi-stop-fill me-1"></i>Stop
+            </button>
+          </div>
+        </div>
+        <pre class="bg-body-secondary rounded p-2 small font-monospace az-gen-log" style="max-height:200px;overflow-y:auto" id="az-gen-log-${esc(db.id)}">Idle</pre>
+      </div>`);
+      $body.append($card);
+    });
+
+    $body.find('.btn-start-az-gen').on('click', function () {
+      const inst = $(this).data('instance');
+      const eng  = $(this).data('engine');
+      $.post(`/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/start`,
+             JSON.stringify({ instanceId: inst, engine: eng }), null, 'json')
+        .done(() => { showToast('Generator started for ' + inst, 'success'); startAZGenPoll(envId, inst); })
+        .fail(xhr => showToast('Start failed: ' + apiError(xhr), 'danger'));
+    });
+
+    $body.find('.btn-stop-az-gen').on('click', function () {
+      const inst = $(this).data('instance');
+      $.post(`/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/stop`,
+             JSON.stringify({ instanceId: inst }), null, 'json')
+        .done(() => showToast('Generator stopped for ' + inst, 'secondary'))
+        .fail(xhr => showToast('Stop failed: ' + apiError(xhr), 'danger'));
+    });
+
+    // Start polling for all instances
+    dbs.forEach(db => startAZGenPoll(envId, db.id));
+  });
+}
+
+function startAZGenPoll(envId, instanceId) {
+  if (!App.azPollFns) App.azPollFns = [];
+
+  const poll = () => {
+    $.getJSON(`/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/logs?instance=${encodeURIComponent(instanceId)}`)
+      .done(d => {
+        const $log = $(`#az-gen-log-${CSS.escape(instanceId)}`);
+        if ($log.length && d.lines && d.lines.length) {
+          $log.text(d.lines.join('\n'));
+          $log.scrollTop($log[0].scrollHeight);
+        }
+      });
+  };
+
+  App.azPollFns.push(poll);
+  poll();
+
+  if (!App.azGenTimer) {
+    App.azGenTimer = setInterval(() => {
+      if ($('#az-gen-body').length) {
+        App.azPollFns.forEach(fn => fn());
+      }
+    }, 3000);
+  }
 }
 
 function showToast(msg, type) {

@@ -31,6 +31,19 @@
   </div>
 </div>
 
+<!-- Azure Database Detail Offcanvas -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="azDBOffcanvas" style="width:540px">
+  <div class="offcanvas-header border-bottom border-secondary-subtle">
+    <h6 class="offcanvas-title font-monospace" id="azDBOffcanvasTitle">Azure Database Info</h6>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" title="Close panel"></button>
+  </div>
+  <div class="offcanvas-body p-0" id="azDBOffcanvasBody">
+    <div class="d-flex justify-content-center align-items-center p-5">
+      <div class="spinner-border spinner-border-sm text-info"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Cloud SQL Detail Offcanvas -->
 <div class="offcanvas offcanvas-end" tabindex="-1" id="cloudSQLOffcanvas" style="width:520px">
   <div class="offcanvas-header border-bottom border-secondary-subtle">
@@ -121,6 +134,10 @@
       <button class="btn btn-outline-warning btn-sm" id="btn-deploy-gcp"
               title="Deploy a new isolated GCP Floci environment">
         <i class="bi bi-google me-1"></i>Deploy GCP Env
+      </button>
+      <button class="btn btn-outline-info btn-sm" id="btn-deploy-az"
+              title="Deploy a new isolated Azure floci-az environment (port 6001+)">
+        <i class="bi bi-microsoft me-1"></i>Deploy Azure Env
       </button>
     </div>
   </div>
@@ -437,6 +454,82 @@
     <div class="card-header"><i class="bi bi-database me-2 text-warning"></i>Cloud SQL Instance Generators</div>
     <div class="card-body" id="cloudsql-gen-body">
       <p class="text-secondary small">Loading Cloud SQL instances…</p>
+    </div>
+  </div>
+</template>
+
+<!-- ── Azure Templates ─────────────────────────────────────────── -->
+
+<template id="tpl-az-env-detail">
+  <div class="mb-3">
+    <a href="#" class="text-decoration-none text-secondary small">
+      <i class="bi bi-chevron-left me-1"></i>All Environments
+    </a>
+  </div>
+  <div class="card mb-4">
+    <div class="card-body d-flex flex-wrap gap-3 align-items-center">
+      <span class="badge bg-info text-dark me-1"><i class="bi bi-microsoft me-1"></i>Azure</span>
+      <h5 class="mb-0 me-3 fw-bold text-info" id="az-detail-title"></h5>
+      <span class="badge" id="az-detail-status"></span>
+      <div class="ms-auto d-flex gap-3 small font-monospace">
+        <span title="floci-az port"><i class="bi bi-hdd-network me-1 text-secondary"></i><span id="az-detail-port"></span></span>
+        <span title="Azure Subscription ID"><i class="bi bi-key me-1 text-secondary"></i><span id="az-detail-sub"></span></span>
+        <span title="Docker network name"><i class="bi bi-diagram-3 me-1 text-secondary"></i><span id="az-detail-network"></span></span>
+      </div>
+    </div>
+  </div>
+  <ul class="nav nav-tabs mb-3" id="az-detail-tabs">
+    <li class="nav-item"><a class="nav-link active" data-az-tab="azdb" href="#">Azure Databases</a></li>
+    <li class="nav-item"><a class="nav-link" data-az-tab="create-azdb" href="#">Create Database</a></li>
+    <li class="nav-item"><a class="nav-link" data-az-tab="az-generator" href="#">Data Generator</a></li>
+  </ul>
+  <div id="az-detail-tab-content"></div>
+</template>
+
+<template id="tpl-tab-azdb">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-database me-2 text-info"></i>Azure Managed Databases</span>
+      <button class="btn btn-sm btn-outline-secondary" id="btn-refresh-az-detail">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0">
+        <thead><tr><th>Name</th><th>Engine</th><th>Status</th><th>Endpoint</th><th class="text-center" style="width:110px">Actions</th></tr></thead>
+        <tbody id="azdb-tbody"><tr><td colspan="5" class="text-center text-secondary p-3">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-tab-create-azdb">
+  <div class="card" style="max-width:480px">
+    <div class="card-header"><i class="bi bi-plus-circle me-2 text-info"></i>Create Azure Database</div>
+    <div class="card-body">
+      <div class="mb-3">
+        <label class="form-label">Engine</label>
+        <select class="form-select" id="azdb-engine">
+          <option value="mysql">Azure Database for MySQL (Flexible)</option>
+          <option value="mariadb">Azure Database for MariaDB (Single)</option>
+          <option value="postgres">Azure Database for PostgreSQL (Flexible)</option>
+        </select>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-info" id="btn-create-azdb">
+          <i class="bi bi-play-fill me-1"></i>Create &amp; Stream Output
+        </button>
+        <span class="text-secondary small" id="azdb-suggest-label"></span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-tab-az-generator">
+  <div class="card">
+    <div class="card-header"><i class="bi bi-database me-2 text-info"></i>Azure Database Generators</div>
+    <div class="card-body" id="az-gen-body">
+      <p class="text-secondary small">Loading Azure databases…</p>
     </div>
   </div>
 </template>

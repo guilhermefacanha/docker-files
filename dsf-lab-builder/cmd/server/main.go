@@ -26,14 +26,16 @@ func main() {
 	workspace := envOr("WORKSPACE", filepath.Join(root, "workspace"))
 	scriptsDir := envOr("SCRIPTS_DIR", filepath.Join(root, "scripts"))
 	gcpScriptsDir := envOr("GCP_SCRIPTS_DIR", filepath.Join(root, "scripts", "gcp"))
+	azureScriptsDir := envOr("AZURE_SCRIPTS_DIR", filepath.Join(root, "scripts", "azure"))
 	staticDir := envOr("STATIC_DIR", filepath.Join(root, "static"))
 	port := envOr("PORT", "8080")
 
 	cfg := &env.Config{
-		Workspace:     workspace,
-		ScriptsDir:    scriptsDir,
-		GCPScriptsDir: gcpScriptsDir,
-		MaxSlots:      5,
+		Workspace:       workspace,
+		ScriptsDir:      scriptsDir,
+		GCPScriptsDir:   gcpScriptsDir,
+		AzureScriptsDir: azureScriptsDir,
+		MaxSlots:        5,
 	}
 
 	mux := http.NewServeMux()
@@ -46,6 +48,7 @@ func main() {
 	log.Printf("  workspace      : %s  (exists=%v)", workspace, dirExists(workspace))
 	log.Printf("  scripts        : %s  (exists=%v)", scriptsDir, dirExists(scriptsDir))
 	log.Printf("  gcp-scripts    : %s  (exists=%v)", gcpScriptsDir, dirExists(gcpScriptsDir))
+	log.Printf("  azure-scripts  : %s  (exists=%v)", azureScriptsDir, dirExists(azureScriptsDir))
 	log.Printf("  static         : %s  (exists=%v)", staticDir, dirExists(staticDir))
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatal(err)
