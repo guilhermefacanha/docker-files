@@ -4,6 +4,73 @@ A browser-based control panel for managing multiple Floci (LocalStack) AWS envir
 
 ---
 
+## Table of Contents
+
+- [Build](#build)
+- [Run](#run)
+  - [Change the default port](#change-the-default-port)
+- [Feasibility Assessment](#feasibility-assessment)
+- [Architecture](#architecture)
+- [How Each Requirement Is Achieved](#how-each-requirement-is-achieved)
+- [Project Structure](#project-structure)
+- [Key Technical Decisions](#key-technical-decisions)
+- [Limitations / Open Questions](#limitations--open-questions)
+
+---
+
+## Build
+
+```bash
+make build-all
+```
+
+Outputs binaries to `dist/`:
+
+| Platform            | Binary                               |
+|---------------------|--------------------------------------|
+| macOS Apple Silicon | `dist/dsf-lab-builder-darwin-arm64`  |
+| macOS Intel         | `dist/dsf-lab-builder-darwin-amd64`  |
+| Linux x86-64        | `dist/dsf-lab-builder-linux-amd64`   |
+
+---
+
+## Run
+
+The binary must run from a directory that contains `scripts/` and `static/`:
+
+```
+my-deploy/
+├── dsf-lab-builder-darwin-arm64   # (or the linux binary)
+├── scripts/
+└── static/
+```
+
+Copy the required folders next to the binary before running:
+
+```bash
+cp -r scripts/ static/ /path/to/my-deploy/
+cp dist/dsf-lab-builder-darwin-arm64 /path/to/my-deploy/
+```
+
+Then run it from that directory:
+
+```bash
+cd /path/to/my-deploy
+./dsf-lab-builder-darwin-arm64   # macOS Apple Silicon
+./dsf-lab-builder-darwin-amd64   # macOS Intel
+./dsf-lab-builder-linux-amd64    # Linux
+```
+
+Open http://localhost:8080 in your browser. Press `Ctrl+C` to stop.
+
+### Change the default port
+
+```bash
+PORT=9090 ./dist/dsf-lab-builder-darwin-arm64
+```
+
+---
+
 ## Feasibility Assessment
 
 **Overall: Fully feasible.** All the hard primitives already exist in `floci-local-aws/`. The builder is a thin orchestration layer: a Go HTTP server that wraps the existing scripts, exposes them via a REST API, and streams output to a jQuery/Bootstrap frontend.
