@@ -1,12 +1,22 @@
 services:
+  docker-proxy:
+    image: alpine/socat:latest
+    command: TCP-LISTEN:2375,reuseaddr,fork UNIX-CONNECT:/var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+
   floci-az:
     image: guilhermefacanha/floci:azure
+    depends_on:
+      - docker-proxy
     ports:
       - "${FLOCI_AZ_PORT:-6001}:4577"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data
     environment:
+      DOCKER_HOST: tcp://docker-proxy:2375
+      FLOCI_DOCKER_DOCKER_HOST: tcp://docker-proxy:2375
       FLOCI_AZ_TLS_ENABLED: "false"
       FLOCI_AZ_SERVICES_DOCKER_NETWORK: "${FLOCI_AZ_NETWORK:-floci-az1_default}"
       FLOCI_AZ_SERVICES_EVENT_HUB_MOCKED: "false"

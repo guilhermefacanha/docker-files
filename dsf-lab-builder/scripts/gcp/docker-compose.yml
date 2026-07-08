@@ -1,13 +1,22 @@
 services:
+  docker-proxy:
+    image: alpine/socat:latest
+    command: TCP-LISTEN:2375,reuseaddr,fork UNIX-CONNECT:/var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+
   floci-gcp:
     image: floci/floci-gcp:latest
+    depends_on:
+      - docker-proxy
     ports:
       - "${FLOCI_GCP_PORT:-4588}:4588"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data
     environment:
-      FLOCI_DOCKER_DOCKER_HOST: unix:///var/run/docker.sock
+      DOCKER_HOST: tcp://docker-proxy:2375
+      FLOCI_DOCKER_DOCKER_HOST: tcp://docker-proxy:2375
       FLOCI_SERVICES_DOCKER_NETWORK: "${FLOCI_GCP_NETWORK:-floci-gcp1_default}"
       FLOCI_GCP_DEFAULT_PROJECT: "${GCP_PROJECT_ID:-floci-gcp-lab-1}"
     restart: always
