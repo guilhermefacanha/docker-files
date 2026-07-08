@@ -250,7 +250,7 @@ function renderCloudSQLTable(rows, envId) {
         <button class="btn btn-sm btn-outline-secondary btn-test-cloudsql"
                 data-engine="${esc(eng)}" data-instance="${esc(r.id)}"
                 title="Run Pub/Sub audit log test against this Cloud SQL instance and stream output">
-          <i class="bi bi-lightning"></i>
+          <i class="bi bi-play-fill"></i>
         </button>
       </td>
     </tr>`);
@@ -688,7 +688,7 @@ function renderRDSTable(rows, envId) {
         <button class="btn btn-sm btn-outline-secondary btn-test-rds"
                 data-engine="${esc(eng)}" data-instance="${esc(r.id)}"
                 title="Run CloudWatch audit log test against this RDS instance and stream output">
-          <i class="bi bi-lightning"></i>
+          <i class="bi bi-play-fill"></i>
         </button>
       </td>
     </tr>`);
@@ -1700,7 +1700,7 @@ function renderAZDBTable(rows, envId) {
         <button class="btn btn-sm btn-outline-secondary btn-test-azdb"
                 data-instance="${esc(db.id)}" data-engine="${esc(db.engine)}"
                 title="Generate SQL traffic and verify Event Hub receives audit logs">
-          <i class="bi bi-play"></i>
+          <i class="bi bi-play-fill"></i>
         </button>
       </td>
     </tr>`);
