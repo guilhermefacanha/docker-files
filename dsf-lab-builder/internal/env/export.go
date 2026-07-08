@@ -129,6 +129,113 @@ func ExportAssetsXLSX(e docker.EnvSummary, serverIP, gatewayName string, cfg *Co
 	return buf.Bytes(), nil
 }
 
+// ExportGCPAssetsXLSX builds a DSF Hub import spreadsheet for a GCP env.
+// serverIP is the actual hostname/IP of the machine running floci-gcp (used by DSF to connect).
+// gatewayName fills the jsonar_uid_display_name cell.
+func ExportGCPAssetsXLSX(e docker.EnvSummary, serverIP, gatewayName string) ([]byte, error) {
+	if serverIP == "" {
+		serverIP = "localhost"
+	}
+	if gatewayName == "" {
+		gatewayName = "<agentless-gateway-display-name>"
+	}
+
+	projectID := e.AccountID
+	if projectID == "" {
+		projectID = fmt.Sprintf("floci-gcp-lab-%d", e.Slot)
+	}
+	serviceAccount := fmt.Sprintf("dsf-gateway@%s.iam.gserviceaccount.com", projectID)
+	// Spec format: <service account email>:<default project ID>
+	assetID := fmt.Sprintf("%s:%s", serviceAccount, projectID)
+
+	f := excelize.NewFile()
+	defer f.Close()
+
+	const sheet1 = "Sheet1"
+	f.SetSheetName("Sheet1", sheet1)
+
+	headers := []string{
+		"asset_id", "asset_display_name", "Server Type", "Server IP", "Server Host Name",
+		"Service Name", "asset_source", "admin_email", "Server Port",
+		"jsonar_uid_display_name",
+	}
+	xlsxRow(f, sheet1, 1, toIface(headers))
+	applyHeaderStyle(f, sheet1, 1, len(headers))
+
+	xlsxRow(f, sheet1, 2, []interface{}{
+		assetID, e.ID, "GCP",
+		serverIP, serverIP,
+		"", "GCP", "admin@example.com",
+		e.FlociPort,
+		gatewayName,
+	})
+
+	autoColWidth(f, sheet1)
+
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ExportAZAssetsXLSX builds a DSF Hub import spreadsheet for an Azure env.
+// serverIP fills the endpoint used by DSF to reach floci-az; gatewayName fills the gateway cell.
+func ExportAZAssetsXLSX(e docker.EnvSummary, serverIP, gatewayName string) ([]byte, error) {
+	if serverIP == "" {
+		serverIP = "localhost"
+	}
+	if gatewayName == "" {
+		gatewayName = "<agentless-gateway-display-name>"
+	}
+
+	const (
+		tenantID = "00000000-0000-0000-0000-000000000002"
+		appID    = "00000000-0000-0000-0000-000000000003"
+		rg       = "dsf-lab-rg"
+	)
+	subscriptionID := e.AccountID
+	// Spec format: directory_id/<id>/subscription_id/<id>/<rg>/application_id/<id>
+	assetID := fmt.Sprintf("directory_id/%s/subscription_id/%s/%s/application_id/%s",
+		tenantID, subscriptionID, rg, appID)
+	flociEndpoint := fmt.Sprintf("http://%s:%d", serverIP, e.FlociPort)
+
+	f := excelize.NewFile()
+	defer f.Close()
+
+	const sheet1 = "Sheet1"
+	f.SetSheetName("Sheet1", sheet1)
+
+	// Mandatory spec fields first, then auth_mechanism sub-fields for client_secret
+	headers := []string{
+		"asset_id", "asset_display_name", "Server Type",
+		"Server IP", "Server Host Name", "Server Port",
+		"asset_source", "admin_email", "Service Name",
+		"jsonar_uid_display_name",
+		"auth_mechanism",
+		"directory_id", "application_id", "subscription_id", "client_secret",
+	}
+	xlsxRow(f, sheet1, 1, toIface(headers))
+	applyHeaderStyle(f, sheet1, 1, len(headers))
+
+	xlsxRow(f, sheet1, 2, []interface{}{
+		assetID, e.ID, "AZURE",
+		flociEndpoint, flociEndpoint, e.FlociPort,
+		"AZURE", "dbadmin@company.com", "",
+		gatewayName,
+		"client_secret",
+		tenantID, appID, subscriptionID, "fake-secret",
+	})
+
+	autoColWidth(f, sheet1)
+
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func engineToServerType(engine string) string {

@@ -220,6 +220,29 @@ function loadGCPTab(tab, envId) {
 function initTabCloudSQL(envId) {
   refreshCloudSQLResources(envId);
   $('#btn-refresh-gcp-detail').on('click', () => refreshCloudSQLResources(envId));
+
+  $('#gcp-export-server-ip').val(App.serverIP === 'localhost' ? '' : App.serverIP);
+  $('#gcp-export-server-ip').on('input', function () {
+    App.serverIP = $(this).val().trim() || 'localhost';
+    localStorage.setItem('serverIP', App.serverIP === 'localhost' ? '' : App.serverIP);
+    $('#nav-server-ip').val(App.serverIP === 'localhost' ? '' : App.serverIP);
+  });
+
+  const lsGwKey = 'export-gw-' + envId;
+  const savedGw = localStorage.getItem(lsGwKey) || '';
+  if (savedGw) $('#gcp-export-gateway-name').val(savedGw);
+  $('#gcp-export-gateway-name').on('input', function () {
+    localStorage.setItem(lsGwKey, $(this).val());
+  });
+
+  $('#btn-export-gcp-assets').on('click', function () {
+    const serverIP    = encodeURIComponent($('#gcp-export-server-ip').val().trim());
+    const gatewayName = encodeURIComponent($('#gcp-export-gateway-name').val().trim());
+    const url = `/api/gcp-envs/${encodeURIComponent(envId)}/export?serverIP=${serverIP}&gatewayName=${gatewayName}`;
+    const $a = $('<a>').attr({ href: url, download: '' }).appendTo('body');
+    $a[0].click();
+    $a.remove();
+  });
 }
 
 function refreshCloudSQLResources(envId) {
@@ -1171,7 +1194,7 @@ function refreshRDSGenStatuses(envId) {
 /* ── Job Output Modal ───────────────────────────────────────────────── */
 function openJobModal(title, jobId, onDone) {
   $('#jobModalTitle').text(title);
-  $('#jobModalBadge').text('Running…').removeClass().addClass('badge bg-secondary');
+  $('#jobModalBadge').text('Running…').removeClass().addClass('badge bg-secondary ms-2');
   $('#jobOutput').empty();
   $('#jobModalClose').prop('disabled', true);
 
@@ -1182,14 +1205,14 @@ function openJobModal(title, jobId, onDone) {
   es.onmessage = function (e) {
     if (e.data === '[DONE]') {
       es.close();
-      $('#jobModalBadge').text('Done').removeClass().addClass('badge bg-success');
+      $('#jobModalBadge').text('Done').removeClass().addClass('badge bg-success ms-2');
       $('#jobModalClose').prop('disabled', false);
       if (typeof onDone === 'function') onDone();
       return;
     }
     if (e.data === '[ERROR]') {
       es.close();
-      $('#jobModalBadge').text('Error').removeClass().addClass('badge bg-danger');
+      $('#jobModalBadge').text('Error').removeClass().addClass('badge bg-danger ms-2');
       $('#jobModalClose').prop('disabled', false);
       return;
     }
@@ -1209,7 +1232,7 @@ function openJobModal(title, jobId, onDone) {
   };
   es.onerror = function () {
     es.close();
-    $('#jobModalBadge').text('Error').removeClass().addClass('badge bg-danger');
+    $('#jobModalBadge').text('Error').removeClass().addClass('badge bg-danger ms-2');
     $('#jobModalClose').prop('disabled', false);
   };
 }
@@ -1671,6 +1694,29 @@ function loadAZTab(tab, envId) {
 function initTabAZDB(envId) {
   refreshAZDatabases(envId);
   $('#btn-refresh-az-detail').on('click', () => refreshAZDatabases(envId));
+
+  $('#az-export-server-ip').val(App.serverIP === 'localhost' ? '' : App.serverIP);
+  $('#az-export-server-ip').on('input', function () {
+    App.serverIP = $(this).val().trim() || 'localhost';
+    localStorage.setItem('serverIP', App.serverIP === 'localhost' ? '' : App.serverIP);
+    $('#nav-server-ip').val(App.serverIP === 'localhost' ? '' : App.serverIP);
+  });
+
+  const lsGwKey = 'export-gw-' + envId;
+  const savedGw = localStorage.getItem(lsGwKey) || '';
+  if (savedGw) $('#az-export-gateway-name').val(savedGw);
+  $('#az-export-gateway-name').on('input', function () {
+    localStorage.setItem(lsGwKey, $(this).val());
+  });
+
+  $('#btn-export-az-assets').on('click', function () {
+    const serverIP    = encodeURIComponent($('#az-export-server-ip').val().trim());
+    const gatewayName = encodeURIComponent($('#az-export-gateway-name').val().trim());
+    const url = `/api/az-envs/${encodeURIComponent(envId)}/export?serverIP=${serverIP}&gatewayName=${gatewayName}`;
+    const $a = $('<a>').attr({ href: url, download: '' }).appendTo('body');
+    $a[0].click();
+    $a.remove();
+  });
 }
 
 function refreshAZDatabases(envId) {

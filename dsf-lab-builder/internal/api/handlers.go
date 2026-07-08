@@ -46,6 +46,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	// Asset export
 	mux.HandleFunc("GET /api/envs/{id}/export", h.exportAssets)
+	mux.HandleFunc("GET /api/gcp-envs/{id}/export", h.exportGCPAssets)
+	mux.HandleFunc("GET /api/az-envs/{id}/export", h.exportAZAssets)
 
 	// GCP env lifecycle
 	mux.HandleFunc("POST /api/gcp-envs", h.deployGCPEnv)
@@ -402,6 +404,48 @@ func (h *Handler) exportAssets(w http.ResponseWriter, r *http.Request) {
 	filename := id + "-dsf-assets.xlsx"
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Write(data)
+}
+
+func (h *Handler) exportGCPAssets(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	serverIP := r.URL.Query().Get("serverIP")
+	gatewayName := r.URL.Query().Get("gatewayName")
+
+	e, err := findGCPEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	data, err := env.ExportGCPAssetsXLSX(e, serverIP, gatewayName)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+id+`-gcp-assets.xlsx"`)
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Write(data)
+}
+
+func (h *Handler) exportAZAssets(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	serverIP := r.URL.Query().Get("serverIP")
+	gatewayName := r.URL.Query().Get("gatewayName")
+
+	e, err := findAZEnv(id)
+	if err != nil {
+		writeError(w, 404, err.Error())
+		return
+	}
+	data, err := env.ExportAZAssetsXLSX(e, serverIP, gatewayName)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+id+`-azure-assets.xlsx"`)
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
 	w.Write(data)
 }
