@@ -24,8 +24,8 @@ CONTAINER_NAME="floci-cloudsql-${GCP_PROJECT_ID}-${INSTANCE_NAME}"
 
 step()  { echo; echo "=== $* ==="; }
 info()  { echo "    $*"; }
-gcp()   { gcurl -sf -H "Content-Type: application/json" "$@"; }
-gcp_get() { gcurl -sf "${GCP_ENDPOINT_URL}$1"; }
+gcp()   { gcurl -s --fail-with-body -H "Content-Type: application/json" "$@"; }
+gcp_get() { gcurl -s --fail-with-body "${GCP_ENDPOINT_URL}$1"; }
 
 # Run mysql inside the Cloud SQL container (no direct port exposure from floci-gcp)
 db_mysql() { docker exec "${CONTAINER_NAME}" mysql -u root -p"${DB_MASTER_PASS}" "$@"; }

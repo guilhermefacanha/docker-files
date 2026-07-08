@@ -56,17 +56,17 @@ export -f acurl
 
 # ── ARM API convenience wrappers ──────────────────────────────────────────────
 az_get() {
-    acurl -sf "${FLOCI_AZ_ENDPOINT}$1"
+    acurl -s --fail-with-body "${FLOCI_AZ_ENDPOINT}$1"
 }
 az_put() {
     local path="$1"; shift
-    acurl -sf -X PUT -H "Content-Type: application/json" "${FLOCI_AZ_ENDPOINT}${path}" "$@"
+    acurl -s --fail-with-body -X PUT -H "Content-Type: application/json" "${FLOCI_AZ_ENDPOINT}${path}" "$@"
 }
 az_post() {
     local path="$1"; shift
-    acurl -sf -X POST -H "Content-Type: application/json" "${FLOCI_AZ_ENDPOINT}${path}" "$@"
+    acurl -s --fail-with-body -X POST -H "Content-Type: application/json" "${FLOCI_AZ_ENDPOINT}${path}" "$@"
 }
 az_delete() {
-    acurl -sf -X DELETE "${FLOCI_AZ_ENDPOINT}$1"
+    acurl -s --fail-with-body -X DELETE "${FLOCI_AZ_ENDPOINT}$1"
 }
 export -f az_get az_put az_post az_delete

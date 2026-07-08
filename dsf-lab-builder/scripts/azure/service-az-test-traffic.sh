@@ -111,7 +111,7 @@ fi
 # Check Artemis Event Hub namespace
 EH_ACCOUNT_PREFIX="${AZ_EVENTHUB_ACCOUNT_PREFIX:-dsf-lab}"
 EH_NS_URL="${FLOCI_AZ_ENDPOINT}/${EH_ACCOUNT_PREFIX}-eventhub/namespaces/${AZ_EVENTHUB_NAMESPACE}"
-EH_STATE=$(curl -sf "${EH_NS_URL}" 2>/dev/null | python3 -c "
+EH_STATE=$(curl -s --fail-with-body "${EH_NS_URL}" | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
 mocked=d.get('mocked',True)

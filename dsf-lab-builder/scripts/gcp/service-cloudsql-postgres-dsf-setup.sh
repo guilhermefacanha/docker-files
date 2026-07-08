@@ -16,8 +16,8 @@ CONTAINER_NAME="floci-cloudsql-${GCP_PROJECT_ID}-${INSTANCE_NAME}"
 
 step()  { echo; echo "=== $* ==="; }
 info()  { echo "    $*"; }
-gcp()   { gcurl -sf -H "Content-Type: application/json" "$@"; }
-gcp_get() { gcurl -sf "${GCP_ENDPOINT_URL}$1"; }
+gcp()   { gcurl -s --fail-with-body -H "Content-Type: application/json" "$@"; }
+gcp_get() { gcurl -s --fail-with-body "${GCP_ENDPOINT_URL}$1"; }
 
 # Run psql inside the container as the bootstrap postgres user (floci-gcp default)
 db_psql() { docker exec -e PGPASSWORD=postgres "${CONTAINER_NAME}" psql -U postgres -d postgres "$@"; }

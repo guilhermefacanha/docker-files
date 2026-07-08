@@ -39,8 +39,8 @@ step "STEP 1: Creating Event Hub namespace '${AZ_EVENTHUB_NAMESPACE}' (Artemis A
 
 EH_ACCOUNT_PREFIX="${AZ_EVENTHUB_ACCOUNT_PREFIX:-dsf-lab}"
 EH_NS_URL="${FLOCI_AZ_ENDPOINT}/${EH_ACCOUNT_PREFIX}-eventhub/namespaces/${AZ_EVENTHUB_NAMESPACE}"
-EH_RESP=$(curl -sf -X PUT -H "Content-Type: application/json" "${EH_NS_URL}" \
-    -d "{\"entities\":\"${AZ_EVENTHUB_NAME}\",\"consumerGroups\":\"\$Default\"}" 2>/dev/null || echo '{"mocked":true}')
+EH_RESP=$(curl -s --fail-with-body -X PUT -H "Content-Type: application/json" "${EH_NS_URL}" \
+    -d "{\"entities\":\"${AZ_EVENTHUB_NAME}\",\"consumerGroups\":\"\$Default\"}" || echo '{"mocked":true}')
 EH_MOCKED=$(echo "$EH_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('mocked',True)).lower())" 2>/dev/null || echo "true")
 
 if [ "$EH_MOCKED" = "false" ]; then

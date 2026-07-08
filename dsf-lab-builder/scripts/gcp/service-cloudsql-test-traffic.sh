@@ -17,10 +17,10 @@ PUBSUB_POLL_INTERVAL=5
 
 step()  { echo; echo "=== $* ==="; }
 info()  { echo "    $*"; }
-gcp()   { gcurl -sf -H "Content-Type: application/json" "$@"; }
+gcp()   { gcurl -s --fail-with-body -H "Content-Type: application/json" "$@"; }
 
 step "STEP 1: Verifying Cloud SQL instance '${INSTANCE_NAME}' is RUNNABLE"
-STATE=$(gcurl -sf "${GCP_ENDPOINT_URL}/sql/v1beta4/projects/${GCP_PROJECT_ID}/instances/${INSTANCE_NAME}" \
+STATE=$(gcurl -s --fail-with-body "${GCP_ENDPOINT_URL}/sql/v1beta4/projects/${GCP_PROJECT_ID}/instances/${INSTANCE_NAME}" \
         | command grep -o '"state":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "NOT_FOUND")
 if [ "$STATE" != "RUNNABLE" ]; then
     echo "ERROR: instance state is '${STATE}' — run setup script first." >&2; exit 1
@@ -114,14 +114,14 @@ if [ "${MSG_COUNT:-0}" -eq 0 ]; then
     fi
 
     step "DIAGNOSTIC: Pub/Sub topic list"
-    gcurl -sf "${GCP_ENDPOINT_URL}/v1/projects/${GCP_PROJECT_ID}/topics" 2>/dev/null | \
-        python3 -c "import sys,json; d=json.load(sys.stdin); [print('  ',t.get('name','')) for t in d.get('topics',[])]" 2>/dev/null || \
+    gcurl -s --fail-with-body "${GCP_ENDPOINT_URL}/v1/projects/${GCP_PROJECT_ID}/topics" | \
+        python3 -c "import sys,json; d=json.load(sys.stdin); [print('  ',t.get('name','')) for t in d.get('topics',[])]" || \
         echo "  (could not list topics)"
 fi
 
 step "STEP 4: Checking Cloud Logging for entries"
-gcurl -sf "${GCP_ENDPOINT_URL}/v2/projects/${GCP_PROJECT_ID}/logs" | \
-  python3 -c "import sys,json; d=json.load(sys.stdin); [print('    ',l) for l in d.get('logNames',[])]" 2>/dev/null
+gcurl -s --fail-with-body "${GCP_ENDPOINT_URL}/v2/projects/${GCP_PROJECT_ID}/logs" | \
+  python3 -c "import sys,json; d=json.load(sys.stdin); [print('    ',l) for l in d.get('logNames',[])]"
 
 echo
 if [ "${MSG_COUNT:-0}" -gt 0 ]; then
