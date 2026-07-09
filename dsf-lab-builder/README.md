@@ -7,6 +7,7 @@ A browser-based control panel for managing multiple Floci (LocalStack) AWS envir
 ## Table of Contents
 
 - [Build](#build)
+- [Package](#package)
 - [Run](#run)
   - [Change the default port](#change-the-default-port)
 - [Feasibility Assessment](#feasibility-assessment)
@@ -31,6 +32,32 @@ Outputs binaries to `dist/`:
 | macOS Apple Silicon | `dist/dsf-lab-builder-darwin-arm64`  |
 | macOS Intel         | `dist/dsf-lab-builder-darwin-amd64`  |
 | Linux x86-64        | `dist/dsf-lab-builder-linux-amd64`   |
+
+---
+
+## Package
+
+To bundle all binaries and required folders into a single archive:
+
+```bash
+make dist-package
+```
+
+This produces `dist-distro.tar.gz` containing:
+
+```
+dsf-lab-builder-darwin-arm64
+dsf-lab-builder-darwin-amd64
+dsf-lab-builder-linux-amd64
+scripts/
+static/
+```
+
+Extract and run on the target machine:
+
+```bash
+tar -xzf dist-distro.tar.gz -C /path/to/my-deploy/
+```
 
 ---
 

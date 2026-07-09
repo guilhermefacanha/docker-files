@@ -2,7 +2,7 @@ BINARY   := dsf-lab-builder
 DIST     := dist
 CMD      := ./cmd/server
 
-.PHONY: run build build-all build-mac-arm build-mac-intel build-linux clean
+.PHONY: run build build-all build-mac-arm build-mac-intel build-linux dist-package clean
 
 ## Run locally (hot: just recompile and restart)
 run:
@@ -26,5 +26,15 @@ build-mac-intel:
 build-linux:
 	GOOS=linux   GOARCH=amd64 go build -o $(DIST)/$(BINARY)-linux-amd64    $(CMD)
 
+## Package all binaries + scripts/ + static/ into dist-distro.tar.gz
+dist-package: build-all
+	tar -czf dist-distro.tar.gz \
+		-C . scripts/ static/ \
+		-C $(DIST) \
+		$(BINARY)-darwin-arm64 \
+		$(BINARY)-darwin-amd64 \
+		$(BINARY)-linux-amd64
+	@echo "Created dist-distro.tar.gz"
+
 clean:
-	rm -rf $(DIST) $(BINARY)
+	rm -rf $(DIST) $(BINARY) dist-distro.tar.gz
