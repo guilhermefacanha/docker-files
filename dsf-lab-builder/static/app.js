@@ -1,5 +1,8 @@
 'use strict';
 
+// Base path derived from the URL so API calls work under any context path (e.g. /labbuilder).
+const API_BASE = window.location.pathname.replace(/\/$/, '');
+
 /* ── State ─────────────────────────────────────────────────────────────── */
 const App = {
   currentEnvId: null,
@@ -68,7 +71,7 @@ function showHome() {
 }
 
 function loadEnvs() {
-  $.getJSON('/api/envs').done(renderEnvGrid).fail(() => renderEnvGrid([]));
+  $.getJSON(API_BASE + '/api/envs').done(renderEnvGrid).fail(() => renderEnvGrid([]));
 }
 
 function renderEnvGrid(envs) {
@@ -126,7 +129,7 @@ function deployNewEnv() {
   if (!confirm('Deploy a new AWS environment?\nThis will start floci-aws and supporting containers.')) return;
   const $btn = $('#btn-deploy').prop('disabled', true)
     .html('<span class="spinner-border spinner-border-sm me-1"></span>Deploying…');
-  $.post('/api/envs')
+  $.post(API_BASE + '/api/envs')
     .done(res => {
       $btn.prop('disabled', false).html('<i class="bi bi-plus-circle me-1"></i>Deploy New Env');
       openJobModal('Deploying New Environment', res.jobId, () => loadEnvs());
@@ -141,7 +144,7 @@ function deployNewGCPEnv() {
   if (!confirm('Deploy a new GCP environment?\nThis will start floci-gcp and supporting containers.')) return;
   const $btn = $('#btn-deploy-gcp').prop('disabled', true)
     .html('<span class="spinner-border spinner-border-sm me-1"></span>Deploying…');
-  $.post('/api/gcp-envs')
+  $.post(API_BASE + '/api/gcp-envs')
     .done(res => {
       $btn.prop('disabled', false).html('<i class="bi bi-google me-1"></i>Deploy GCP Env');
       openJobModal('Deploying New GCP Environment', res.jobId, () => loadEnvs());
@@ -154,14 +157,14 @@ function deployNewGCPEnv() {
 
 function destroyGCPEnv(env) {
   if (!confirm(`Destroy ${labelForEnv(env)}?\nThis will stop all containers and remove all data. This cannot be undone.`)) return;
-  $.ajax({ url: '/api/gcp-envs/' + encodeURIComponent(env.id), method: 'DELETE' })
+  $.ajax({ url: API_BASE + '/api/gcp-envs/' + encodeURIComponent(env.id), method: 'DELETE' })
     .done(res => openJobModal('Destroying ' + labelForEnv(env), res.jobId, () => loadEnvs()))
     .fail(xhr => showToast('Destroy failed: ' + apiError(xhr), 'danger'));
 }
 
 function destroyEnv(env) {
   if (!confirm(`Destroy ${labelForEnv(env)}?\nThis will stop all containers and remove all data. This cannot be undone.`)) return;
-  $.ajax({ url: '/api/envs/' + encodeURIComponent(env.id), method: 'DELETE' })
+  $.ajax({ url: API_BASE + '/api/envs/' + encodeURIComponent(env.id), method: 'DELETE' })
     .done(res => openJobModal('Destroying ' + labelForEnv(env), res.jobId, () => loadEnvs()))
     .fail(xhr => showToast('Destroy failed: ' + apiError(xhr), 'danger'));
 }
@@ -191,7 +194,7 @@ function showGCPEnvDetail(envId) {
 }
 
 function loadGCPEnvHeader(envId) {
-  $.getJSON('/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
     $('#gcp-detail-title').text(labelForEnv(d));
     $('#gcp-detail-status').text(d.status).removeClass().addClass('badge ' + statusBadgeClass(d.status));
     $('#gcp-detail-port').text(d.flociPort || '—');
@@ -238,7 +241,7 @@ function initTabCloudSQL(envId) {
   $('#btn-export-gcp-assets').on('click', function () {
     const serverIP    = encodeURIComponent($('#gcp-export-server-ip').val().trim());
     const gatewayName = encodeURIComponent($('#gcp-export-gateway-name').val().trim());
-    const url = `/api/gcp-envs/${encodeURIComponent(envId)}/export?serverIP=${serverIP}&gatewayName=${gatewayName}`;
+    const url = `${API_BASE}/api/gcp-envs/${encodeURIComponent(envId)}/export?serverIP=${serverIP}&gatewayName=${gatewayName}`;
     const $a = $('<a>').attr({ href: url, download: '' }).appendTo('body');
     $a[0].click();
     $a.remove();
@@ -246,7 +249,7 @@ function initTabCloudSQL(envId) {
 }
 
 function refreshCloudSQLResources(envId) {
-  $.getJSON('/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
     renderCloudSQLTable(d.cloudSQL || [], envId);
   });
 }
@@ -285,7 +288,7 @@ function renderCloudSQLTable(rows, envId) {
     const eng = $(this).data('engine');
     const inst = $(this).data('instance');
     $.ajax({
-      url: `/api/gcp-envs/${encodeURIComponent(envId)}/test/cloudsql/${eng}`,
+      url: `${API_BASE}/api/gcp-envs/${encodeURIComponent(envId)}/test/cloudsql/${eng}`,
       method: 'POST',
       contentType: 'application/json',
       data: JSON.stringify({ instanceId: inst }),
@@ -303,7 +306,7 @@ function showCloudSQLDetail(envId, instanceId) {
   const oc = new bootstrap.Offcanvas(document.getElementById('cloudSQLOffcanvas'));
   oc.show();
 
-  $.getJSON(`/api/gcp-envs/${encodeURIComponent(envId)}/cloudsql/detail?instance=${encodeURIComponent(instanceId)}`)
+  $.getJSON(`${API_BASE}/api/gcp-envs/${encodeURIComponent(envId)}/cloudsql/detail?instance=${encodeURIComponent(instanceId)}`)
     .done(d => renderCloudSQLDetailPanel(d))
     .fail(xhr => {
       document.getElementById('cloudSQLOffcanvasBody').innerHTML =
@@ -374,7 +377,7 @@ function initTabCreateCloudSQL(envId) {
   });
   $('#btn-cloudsql-info').on('click', function () {
     const engine = $('#cloudsql-engine').val();
-    $.getJSON('/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
+    $.getJSON(API_BASE + '/api/gcp-envs/' + encodeURIComponent(envId)).done(d => {
       const endpoint = (d.flociPort ? `http://localhost:${d.flociPort}` : 'http://localhost:4589').replace('localhost', App.serverIP);
       const projectId = d.accountId || 'floci-gcp-lab-1';
       const slot = d.slot || 1;
@@ -390,7 +393,7 @@ function initTabCreateCloudSQL(envId) {
 function doCreateCloudSQL(envId, engine, instanceId) {
   $('#btn-create-cloudsql').prop('disabled', true);
   $.ajax({
-    url: `/api/gcp-envs/${encodeURIComponent(envId)}/cloudsql`,
+    url: `${API_BASE}/api/gcp-envs/${encodeURIComponent(envId)}/cloudsql`,
     method: 'POST',
     contentType: 'application/json',
     data: JSON.stringify({ engine, instanceId }),
@@ -497,7 +500,7 @@ function initTabGCPGenerator(envId) {
 }
 
 function loadCloudSQLGenSection(envId) {
-  $.getJSON(`/api/gcp-envs/${encodeURIComponent(envId)}`).done(d => {
+  $.getJSON(`${API_BASE}/api/gcp-envs/${encodeURIComponent(envId)}`).done(d => {
     const $body = $('#cloudsql-gen-body').empty();
     const instances = d.cloudSQL || [];
     if (!instances.length) {
@@ -536,13 +539,13 @@ function renderCloudSQLGenCard(envId, inst, $container) {
 
   $card.find('.btn-csql-start').on('click', function () {
     $(this).prop('disabled', true);
-    $.post(`/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/start`,
+    $.post(`${API_BASE}/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/start`,
       JSON.stringify({ instanceId: inst.id }), null, 'json')
       .done(() => { showToast('Generator started for ' + inst.id, 'success'); refreshCloudSQLGenCard(envId, inst.id, $card); })
       .fail(xhr => { $(this).prop('disabled', false); showToast(apiError(xhr), 'danger'); });
   });
   $card.find('.btn-csql-stop').on('click', function () {
-    $.post(`/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/stop`,
+    $.post(`${API_BASE}/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/stop`,
       JSON.stringify({ instanceId: inst.id }), null, 'json')
       .done(() => { showToast('Generator stopped', 'warning'); refreshCloudSQLGenCard(envId, inst.id, $card); })
       .fail(xhr => showToast(apiError(xhr), 'danger'));
@@ -554,7 +557,7 @@ function renderCloudSQLGenCard(envId, inst, $container) {
 }
 
 function refreshCloudSQLGenCard(envId, instanceId, $card) {
-  $.getJSON(`/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/logs?instance=${encodeURIComponent(instanceId)}`)
+  $.getJSON(`${API_BASE}/api/gcp-envs/${encodeURIComponent(envId)}/generator/cloudsql/logs?instance=${encodeURIComponent(instanceId)}`)
     .done(res => {
       const $badge = $card.find('.cloudsql-gen-badge');
       const $log   = $card.find('.cloudsql-gen-log');
@@ -622,7 +625,7 @@ function showEnvDetail(envId) {
 }
 
 function loadEnvHeader(envId) {
-  $.getJSON('/api/envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/envs/' + encodeURIComponent(envId)).done(d => {
     $('#detail-title').text(labelForEnv(d));
     $('#detail-status').text(d.status).removeClass().addClass('badge ' + statusBadgeClass(d.status));
     $('#detail-port').text(d.flociPort || '—');
@@ -672,7 +675,7 @@ function initTabResources(envId) {
   $('#btn-export-assets').on('click', function () {
     const serverIP    = encodeURIComponent($('#export-server-ip').val().trim());
     const gatewayName = encodeURIComponent($('#export-gateway-name').val().trim());
-    const url = `/api/envs/${encodeURIComponent(envId)}/export?serverIP=${serverIP}&gatewayName=${gatewayName}`;
+    const url = `${API_BASE}/api/envs/${encodeURIComponent(envId)}/export?serverIP=${serverIP}&gatewayName=${gatewayName}`;
     const $a = $('<a>').attr({ href: url, download: '' }).appendTo('body');
     $a[0].click();
     $a.remove();
@@ -680,7 +683,7 @@ function initTabResources(envId) {
 }
 
 function refreshResources(envId) {
-  $.getJSON('/api/envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/envs/' + encodeURIComponent(envId)).done(d => {
     renderRDSTable(d.rds || [], envId);
     renderBucketList(d.buckets || []);
   });
@@ -723,7 +726,7 @@ function renderRDSTable(rows, envId) {
     const eng = $(this).data('engine');
     const inst = $(this).data('instance');
     $.ajax({
-      url: `/api/envs/${encodeURIComponent(envId)}/test/rds/${eng}`,
+      url: `${API_BASE}/api/envs/${encodeURIComponent(envId)}/test/rds/${eng}`,
       method: 'POST',
       contentType: 'application/json',
       data: JSON.stringify({ instanceId: inst }),
@@ -752,7 +755,7 @@ function initTabCreateRDS(envId) {
   });
   $('#btn-rds-info').on('click', function () {
     const engine = $('#rds-engine').val();
-    $.getJSON('/api/envs/' + encodeURIComponent(envId)).done(d => {
+    $.getJSON(API_BASE + '/api/envs/' + encodeURIComponent(envId)).done(d => {
       const rawEndpoint = d.flociEndpoint || ('http://localhost:' + d.flociPort);
       const endpoint = rawEndpoint.replace('localhost', App.serverIP);
       const suffix = d.slot || envId.replace('floci-', '');
@@ -769,7 +772,7 @@ function initTabCreateRDS(envId) {
 function doCreateRDS(envId, engine, instanceId) {
   $('#btn-create-rds').prop('disabled', true);
   $.ajax({
-    url: `/api/envs/${encodeURIComponent(envId)}/rds`,
+    url: `${API_BASE}/api/envs/${encodeURIComponent(envId)}/rds`,
     method: 'POST',
     contentType: 'application/json',
     data: JSON.stringify({ engine, instanceId }),
@@ -824,7 +827,7 @@ function showRDSDetail(envId, instanceId) {
   const oc = new bootstrap.Offcanvas(document.getElementById('rdsOffcanvas'));
   oc.show();
 
-  $.getJSON(`/api/envs/${encodeURIComponent(envId)}/rds/detail?instance=${encodeURIComponent(instanceId)}`)
+  $.getJSON(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/rds/detail?instance=${encodeURIComponent(instanceId)}`)
     .done(d => renderRDSDetailPanel(d))
     .fail(xhr => {
       document.getElementById('rdsOffcanvasBody').innerHTML =
@@ -881,12 +884,12 @@ function renderRDSDetailPanel(d) {
 
 /* ── FAM tab ────────────────────────────────────────────────────────── */
 function initTabFAM(envId) {
-  $.getJSON('/api/envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/envs/' + encodeURIComponent(envId)).done(d => {
     if (d.fam) renderFAMInfo(d.fam);
     renderFAMWarningPanel(d.flociPort || 0);
   });
   $('#btn-fam-info').on('click', function () {
-    $.getJSON('/api/envs/' + encodeURIComponent(envId)).done(d => {
+    $.getJSON(API_BASE + '/api/envs/' + encodeURIComponent(envId)).done(d => {
       const rawEndpoint = d.flociEndpoint || ('http://localhost:' + d.flociPort);
       const endpoint = rawEndpoint.replace('localhost', App.serverIP);
       const suffix = d.slot || envId.replace('floci-', '');
@@ -896,11 +899,11 @@ function initTabFAM(envId) {
   $('#btn-create-fam').on('click', function () {
     $(this).prop('disabled', true);
     const self = this;
-    $.post(`/api/envs/${encodeURIComponent(envId)}/fam`)
+    $.post(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/fam`)
       .done(res => {
         $(self).prop('disabled', false);
         openJobModal('Setup FAM Resources', res.jobId, () => {
-          $.getJSON('/api/envs/' + encodeURIComponent(envId)).done(d => {
+          $.getJSON(API_BASE + '/api/envs/' + encodeURIComponent(envId)).done(d => {
             if (d.fam) renderFAMInfo(d.fam);
             renderFAMWarningPanel(d.flociPort || 0);
           });
@@ -909,7 +912,7 @@ function initTabFAM(envId) {
       .fail(xhr => { $(self).prop('disabled', false); showToast(apiError(xhr), 'danger'); });
   });
   $('#btn-test-fam').on('click', function () {
-    $.post(`/api/envs/${encodeURIComponent(envId)}/test/fam`)
+    $.post(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/test/fam`)
       .done(res => openJobModal('Test FAM Traffic + Check CloudTrail Logs (~65s)', res.jobId))
       .fail(xhr => showToast(apiError(xhr), 'danger'));
   });
@@ -1041,12 +1044,12 @@ function initTabGenerator(envId) {
   // FAM section
   loadFAMGenStatus(envId);
   $('#btn-fam-gen-start').on('click', () => {
-    $.post(`/api/envs/${encodeURIComponent(envId)}/generator/fam/start`)
+    $.post(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/generator/fam/start`)
       .done(() => { showToast('FAM generator started', 'success'); loadFAMGenStatus(envId); })
       .fail(xhr => showToast(apiError(xhr), 'danger'));
   });
   $('#btn-fam-gen-stop').on('click', () => {
-    $.post(`/api/envs/${encodeURIComponent(envId)}/generator/fam/stop`)
+    $.post(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/generator/fam/stop`)
       .done(() => { showToast('FAM generator stopped', 'warning'); loadFAMGenStatus(envId); })
       .fail(xhr => showToast(apiError(xhr), 'danger'));
   });
@@ -1063,7 +1066,7 @@ function initTabGenerator(envId) {
 }
 
 function loadFAMGenStatus(envId) {
-  $.getJSON(`/api/envs/${encodeURIComponent(envId)}/generator/fam/logs`).done(res => {
+  $.getJSON(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/generator/fam/logs`).done(res => {
     const $badge = $('#fam-gen-badge');
     if (res.running) {
       $badge.text('Running').removeClass().addClass('badge bg-success');
@@ -1084,7 +1087,7 @@ function loadFAMGenStatus(envId) {
 }
 
 function loadRDSGenSection(envId) {
-  $.getJSON('/api/envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/envs/' + encodeURIComponent(envId)).done(d => {
     const $body = $('#rds-gen-body').empty();
     const rdsInstances = d.rds || [];
     if (!rdsInstances.length) {
@@ -1128,13 +1131,13 @@ function renderRDSGenCard(envId, rds, $container) {
 
   $card.find('.btn-rds-start').on('click', function () {
     $(this).prop('disabled', true);
-    $.post(`/api/envs/${encodeURIComponent(envId)}/generator/rds/start`,
+    $.post(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/generator/rds/start`,
       JSON.stringify({ instanceId: rds.id, engine: rds.engine }), null, 'json')
       .done(() => { showToast('RDS generator started for ' + rds.id, 'success'); refreshRDSGenCard(envId, rds.id, $card); })
       .fail(xhr => { $(this).prop('disabled', false); showToast(apiError(xhr), 'danger'); });
   });
   $card.find('.btn-rds-stop').on('click', function () {
-    $.post(`/api/envs/${encodeURIComponent(envId)}/generator/rds/stop`,
+    $.post(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/generator/rds/stop`,
       JSON.stringify({ instanceId: rds.id }), null, 'json')
       .done(() => { showToast('RDS generator stopped', 'warning'); refreshRDSGenCard(envId, rds.id, $card); })
       .fail(xhr => showToast(apiError(xhr), 'danger'));
@@ -1148,7 +1151,7 @@ function renderRDSGenCard(envId, rds, $container) {
 }
 
 function refreshRDSGenCard(envId, instanceId, $card) {
-  $.getJSON(`/api/envs/${encodeURIComponent(envId)}/generator/rds/logs?instance=${encodeURIComponent(instanceId)}`)
+  $.getJSON(`${API_BASE}/api/envs/${encodeURIComponent(envId)}/generator/rds/logs?instance=${encodeURIComponent(instanceId)}`)
     .done(res => {
       const $badge = $card.find('.rds-gen-badge');
       const $log = $card.find('.rds-gen-log');
@@ -1201,7 +1204,7 @@ function openJobModal(title, jobId, onDone) {
   const modal = new bootstrap.Modal(document.getElementById('jobModal'));
   modal.show();
 
-  const es = new EventSource('/api/jobs/' + jobId + '/stream');
+  const es = new EventSource(API_BASE + '/api/jobs/' + jobId + '/stream');
   es.onmessage = function (e) {
     if (e.data === '[DONE]') {
       es.close();
@@ -1618,7 +1621,7 @@ function deployNewAZEnv() {
   if (!confirm('Deploy a new Azure environment?\nThis will start floci-az and az-log-shipper containers.')) return;
   const $btn = $('#btn-deploy-az').prop('disabled', true)
     .html('<span class="spinner-border spinner-border-sm me-1"></span>Deploying…');
-  $.post('/api/az-envs')
+  $.post(API_BASE + '/api/az-envs')
     .done(res => {
       $btn.prop('disabled', false).html('<i class="bi bi-microsoft me-1"></i>Deploy Azure Env');
       openJobModal('Deploying New Azure Environment', res.jobId, () => loadEnvs());
@@ -1631,7 +1634,7 @@ function deployNewAZEnv() {
 
 function destroyAZEnv(env) {
   if (!confirm(`Destroy Azure environment ${env.id}?\nThis will stop all containers and delete all data.`)) return;
-  $.ajax({ url: '/api/az-envs/' + encodeURIComponent(env.id), method: 'DELETE' })
+  $.ajax({ url: API_BASE + '/api/az-envs/' + encodeURIComponent(env.id), method: 'DELETE' })
     .done(res => openJobModal('Destroying ' + env.id, res.jobId, () => loadEnvs()))
     .fail(xhr => showToast('Destroy failed: ' + apiError(xhr), 'danger'));
 }
@@ -1665,7 +1668,7 @@ function showAZEnvDetail(envId) {
 }
 
 function loadAZEnvHeader(envId) {
-  $.getJSON('/api/az-envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/az-envs/' + encodeURIComponent(envId)).done(d => {
     $('#az-detail-title').text(labelForEnv(d));
     $('#az-detail-status').text(d.status).removeClass().addClass('badge ' + statusBadgeClass(d.status));
     $('#az-detail-port').text(d.flociPort || '—');
@@ -1712,7 +1715,7 @@ function initTabAZDB(envId) {
   $('#btn-export-az-assets').on('click', function () {
     const serverIP    = encodeURIComponent($('#az-export-server-ip').val().trim());
     const gatewayName = encodeURIComponent($('#az-export-gateway-name').val().trim());
-    const url = `/api/az-envs/${encodeURIComponent(envId)}/export?serverIP=${serverIP}&gatewayName=${gatewayName}`;
+    const url = `${API_BASE}/api/az-envs/${encodeURIComponent(envId)}/export?serverIP=${serverIP}&gatewayName=${gatewayName}`;
     const $a = $('<a>').attr({ href: url, download: '' }).appendTo('body');
     $a[0].click();
     $a.remove();
@@ -1720,7 +1723,7 @@ function initTabAZDB(envId) {
 }
 
 function refreshAZDatabases(envId) {
-  $.getJSON('/api/az-envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/az-envs/' + encodeURIComponent(envId)).done(d => {
     renderAZDBTable(d.databases || [], envId);
   });
 }
@@ -1758,7 +1761,7 @@ function renderAZDBTable(rows, envId) {
   $tbody.find('.btn-test-azdb').on('click', function () {
     const inst = $(this).data('instance');
     const eng  = $(this).data('engine');
-    $.post(`/api/az-envs/${encodeURIComponent(envId)}/test/azdb/${eng}`,
+    $.post(`${API_BASE}/api/az-envs/${encodeURIComponent(envId)}/test/azdb/${eng}`,
            JSON.stringify({ instanceId: inst }),
            null, 'json')
       .done(res => openJobModal(`Test Azure ${eng} — ${inst}`, res.jobId))
@@ -1772,7 +1775,7 @@ function showAZDBDetail(envId, instanceId, engine) {
     '<div class="d-flex justify-content-center align-items-center p-5"><div class="spinner-border spinner-border-sm text-info"></div></div>';
   const oc = new bootstrap.Offcanvas(document.getElementById('azDBOffcanvas'));
   oc.show();
-  $.getJSON(`/api/az-envs/${encodeURIComponent(envId)}/azdb/detail?instance=${encodeURIComponent(instanceId)}&engine=${encodeURIComponent(engine)}`)
+  $.getJSON(`${API_BASE}/api/az-envs/${encodeURIComponent(envId)}/azdb/detail?instance=${encodeURIComponent(instanceId)}&engine=${encodeURIComponent(engine)}`)
     .done(d => renderAZDBDetailPanel(d))
     .fail(() => {
       document.getElementById('azDBOffcanvasBody').innerHTML =
@@ -1838,7 +1841,7 @@ function initTabCreateAZDB(envId) {
     const engine = $('#azdb-engine').val();
     const instanceId = $('#azdb-suggest-label').data('suggested') || '';
     if (!instanceId) { showToast('No suggested name available', 'warning'); return; }
-    $.post(`/api/az-envs/${encodeURIComponent(envId)}/azdb`,
+    $.post(`${API_BASE}/api/az-envs/${encodeURIComponent(envId)}/azdb`,
            JSON.stringify({ engine, instanceId }),
            null, 'json')
       .done(res => openJobModal(`Create Azure ${engine} — ${instanceId}`, res.jobId, () => {
@@ -1850,7 +1853,7 @@ function initTabCreateAZDB(envId) {
 
 function loadAZDBSuggest(envId) {
   const engine = $('#azdb-engine').val();
-  $.getJSON(`/api/az-envs/${encodeURIComponent(envId)}/azdb/suggest?engine=${engine}`)
+  $.getJSON(`${API_BASE}/api/az-envs/${encodeURIComponent(envId)}/azdb/suggest?engine=${engine}`)
     .done(d => {
       $('#azdb-suggest-label').text('→ ' + (d.suggested || '')).data('suggested', d.suggested);
     });
@@ -1858,7 +1861,7 @@ function loadAZDBSuggest(envId) {
 
 /* ── Azure generator tab ─────────────────────────────────────────────── */
 function initTabAZGenerator(envId) {
-  $.getJSON('/api/az-envs/' + encodeURIComponent(envId)).done(d => {
+  $.getJSON(API_BASE + '/api/az-envs/' + encodeURIComponent(envId)).done(d => {
     const $body = $('#az-gen-body').empty();
     const dbs = d.databases || [];
     if (!dbs.length) {
@@ -1887,7 +1890,7 @@ function initTabAZGenerator(envId) {
     $body.find('.btn-start-az-gen').on('click', function () {
       const inst = $(this).data('instance');
       const eng  = $(this).data('engine');
-      $.post(`/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/start`,
+      $.post(`${API_BASE}/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/start`,
              JSON.stringify({ instanceId: inst, engine: eng }), null, 'json')
         .done(() => { showToast('Generator started for ' + inst, 'success'); startAZGenPoll(envId, inst); })
         .fail(xhr => showToast('Start failed: ' + apiError(xhr), 'danger'));
@@ -1895,7 +1898,7 @@ function initTabAZGenerator(envId) {
 
     $body.find('.btn-stop-az-gen').on('click', function () {
       const inst = $(this).data('instance');
-      $.post(`/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/stop`,
+      $.post(`${API_BASE}/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/stop`,
              JSON.stringify({ instanceId: inst }), null, 'json')
         .done(() => showToast('Generator stopped for ' + inst, 'secondary'))
         .fail(xhr => showToast('Stop failed: ' + apiError(xhr), 'danger'));
@@ -1910,7 +1913,7 @@ function startAZGenPoll(envId, instanceId) {
   if (!App.azPollFns) App.azPollFns = [];
 
   const poll = () => {
-    $.getJSON(`/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/logs?instance=${encodeURIComponent(instanceId)}`)
+    $.getJSON(`${API_BASE}/api/az-envs/${encodeURIComponent(envId)}/generator/azdb/logs?instance=${encodeURIComponent(instanceId)}`)
       .done(d => {
         const $log = $(`#az-gen-log-${CSS.escape(instanceId)}`);
         if ($log.length && d.lines && d.lines.length) {

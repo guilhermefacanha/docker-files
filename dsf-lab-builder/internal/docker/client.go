@@ -136,6 +136,15 @@ func ListEnvs() ([]EnvSummary, error) {
 	return envs, nil
 }
 
+// hostPort extracts the port (or port range) from a docker ps host binding,
+// handling IPv4 (0.0.0.0:port), IPv6 ([::]:port), and shorthand (:::port).
+func hostPort(hostBinding string) string {
+	if idx := strings.LastIndex(hostBinding, ":"); idx >= 0 {
+		return hostBinding[idx+1:]
+	}
+	return hostBinding
+}
+
 func GetUsedPorts() (map[int]bool, error) {
 	out, err := exec.Command("docker", "ps", "--format", "{{.Ports}}").Output()
 	if err != nil {
@@ -148,9 +157,7 @@ func GetUsedPorts() (map[int]bool, error) {
 			if !strings.Contains(part, "->") {
 				continue
 			}
-			host := strings.Split(part, "->")[0]
-			host = strings.TrimPrefix(host, "0.0.0.0:")
-			host = strings.TrimPrefix(host, "::")
+			host := hostPort(strings.Split(part, "->")[0])
 			if strings.Contains(host, "-") {
 				bounds := strings.SplitN(host, "-", 2)
 				start, _ := strconv.Atoi(bounds[0])
@@ -220,9 +227,7 @@ func flociPort(ports string) int {
 	for _, part := range strings.Split(ports, ",") {
 		part = strings.TrimSpace(part)
 		if strings.Contains(part, "->4566/tcp") {
-			host := strings.Split(part, "->")[0]
-			host = strings.TrimPrefix(host, "0.0.0.0:")
-			host = strings.TrimPrefix(host, "::")
+			host := hostPort(strings.Split(part, "->")[0])
 			p, _ := strconv.Atoi(host)
 			return p
 		}
@@ -234,9 +239,7 @@ func gcpPort(ports string) int {
 	for _, part := range strings.Split(ports, ",") {
 		part = strings.TrimSpace(part)
 		if strings.Contains(part, "->4588/tcp") {
-			host := strings.Split(part, "->")[0]
-			host = strings.TrimPrefix(host, "0.0.0.0:")
-			host = strings.TrimPrefix(host, "::")
+			host := hostPort(strings.Split(part, "->")[0])
 			p, _ := strconv.Atoi(host)
 			return p
 		}
@@ -248,9 +251,7 @@ func azPort(ports string) int {
 	for _, part := range strings.Split(ports, ",") {
 		part = strings.TrimSpace(part)
 		if strings.Contains(part, "->4577/tcp") {
-			host := strings.Split(part, "->")[0]
-			host = strings.TrimPrefix(host, "0.0.0.0:")
-			host = strings.TrimPrefix(host, "::")
+			host := hostPort(strings.Split(part, "->")[0])
 			p, _ := strconv.Atoi(host)
 			return p
 		}
@@ -264,9 +265,7 @@ func rdsRange(ports string) string {
 		if !strings.Contains(part, "->") {
 			continue
 		}
-		host := strings.Split(part, "->")[0]
-		host = strings.TrimPrefix(host, "0.0.0.0:")
-		host = strings.TrimPrefix(host, "::")
+		host := hostPort(strings.Split(part, "->")[0])
 		if strings.Contains(host, "-") {
 			return host
 		}

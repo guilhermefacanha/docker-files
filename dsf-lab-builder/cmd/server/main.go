@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"dsf-lab-builder/internal/api"
 	"dsf-lab-builder/internal/env"
@@ -29,6 +30,7 @@ func main() {
 	azureScriptsDir := envOr("AZURE_SCRIPTS_DIR", filepath.Join(root, "scripts", "azure"))
 	staticDir := envOr("STATIC_DIR", filepath.Join(root, "static"))
 	port := envOr("PORT", "8080")
+	contextPath := strings.Trim(envOr("CONTEXT_PATH", ""), "/")
 
 	cfg := &env.Config{
 		Workspace:       workspace,
@@ -38,12 +40,25 @@ func main() {
 		MaxSlots:        5,
 	}
 
-	mux := http.NewServeMux()
+	sub := http.NewServeMux()
 	h := &api.Handler{Cfg: cfg}
-	h.Register(mux)
-	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
+	h.Register(sub)
+	sub.Handle("/", http.FileServer(http.Dir(staticDir)))
 
-	log.Printf("DSF Lab Builder  http://localhost:%s", port)
+	mux := http.NewServeMux()
+	urlPath := "/"
+	if contextPath != "" {
+		prefix := "/" + contextPath
+		urlPath = prefix + "/"
+		mux.Handle(prefix+"/", http.StripPrefix(prefix, sub))
+		// Redirect bare prefix and root to prefix+/
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, prefix+"/", http.StatusMovedPermanently)
+		})
+	} else {
+		mux.Handle("/", sub)
+	}
+	log.Printf("DSF Lab Builder  http://localhost:%s%s", port, urlPath)
 	log.Printf("  cwd            : %s", cwd)
 	log.Printf("  workspace      : %s  (exists=%v)", workspace, dirExists(workspace))
 	log.Printf("  scripts        : %s  (exists=%v)", scriptsDir, dirExists(scriptsDir))

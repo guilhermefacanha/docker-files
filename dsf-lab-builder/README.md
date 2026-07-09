@@ -88,12 +88,17 @@ cd /path/to/my-deploy
 ./dsf-lab-builder-linux-amd64    # Linux
 ```
 
+run with context path
+```bash
+ 
+```
+
 Open http://localhost:8080 in your browser. Press `Ctrl+C` to stop.
 
-### Change the default port
+### Change the default port or CONTEXT PATH
 
 ```bash
-PORT=9090 ./dist/dsf-lab-builder-darwin-arm64
+PORT=9090 CONTEXT_PATH=labbuilder  ./dist/dsf-lab-builder-darwin-arm64
 ```
 
 ---
